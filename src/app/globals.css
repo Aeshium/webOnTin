@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   THEME — phep mau cua Tailwind v4:
+   Khai báo biến ở đây xong dùng như class bình thường (vd: bg-ink-950).
+   ========================================================================== */
+@theme {
+  --font-sans: var(--font-bvp), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", sans-serif;
+  --color-ink-950: #040710;
+  --color-ink-900: #070b16;
+  --color-ink-800: #0c1224;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background-color: #040710;
+}
+
+::selection {
+  background: rgba(34, 211, 238, 0.25);
+  color: #fff;
+}
+
+/* Thanh cuộn cho giống app xịn */
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #070b16;
+}
+::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 8px;
+  border: 2px solid #070b16;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Thẻ kính mờ — hay gọi là "glassmorphism" */
+.glass {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+}
+
+/* Nền kẻ ô mờ phía sau hero */
+.bg-grid {
+  background-image: linear-gradient(rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 55%, transparent 100%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 60% at 50% 40%, #000 55%, transparent 100%);
+}
+
+/* Chữ gradient thương hiệu */
+.text-gradient {
+  background: linear-gradient(92deg, #22d3ee 0%, #a78bfa 52%, #f472b6 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Hiệu ứng chạy chữ marquee */
+@keyframes marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+.animate-marquee {
+  animation: marquee 36s linear infinite;
+}
+
+/* Bay lơ lửng nhẹ nhàng cho vật trang trí */
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0) rotate(var(--rot, 0deg));
+  }
+  50% {
+    transform: translateY(-14px) rotate(var(--rot, 0deg));
+  }
+}
+.animate-floaty {
+  animation: floaty 6s ease-in-out infinite;
+}
+
+/* Chấm nhấp nháy ở badge "đang mở" */
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: scale(0.8);
+  }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+/* Phím bàn phím 3D — dùng cho mẹo phím tắt và đồ trang trí */
+.keycap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 2rem;
+  padding: 0.35rem 0.65rem;
+  border-radius: 0.6rem;
+  background: linear-gradient(180deg, #1d2540 0%, #0e1428 100%);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.14),
+    0 5px 0 #05070f,
+    0 10px 22px rgba(0, 0, 0, 0.5);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+/* Viền glow theo màu riêng của từng chuyên đề (set --c1 bằng inline style) */
+.card-glow {
+  transition:
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+.card-glow:hover {
+  border-color: color-mix(in srgb, var(--c1, #22d3ee) 50%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in srgb, var(--c1, #22d3ee) 28%, transparent),
+    0 24px 70px -24px color-mix(in srgb, var(--c1, #22d3ee) 40%, transparent);
+  transform: translateY(-4px);
+}
