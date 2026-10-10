@@ -30,9 +30,12 @@ import {
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
+  schoolName: text("school_name"),
+  className: text("class_name"),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   background: text("background").notNull().default("aurora"),
+  avatarUrl: text("avatar_url"),
   examDate: timestamp("exam_date", { withTimezone: true }),
   loginStreak: integer("login_streak").notNull().default(0),
   correctAnswerStreak: integer("correct_answer_streak").notNull().default(0),
@@ -67,6 +70,13 @@ export const mockExamSessions = pgTable("mock_exam_sessions", {
   startedAt: timestamp("started_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+  examId: text("exam_id"),
+  answers: jsonb("answers").$type<(number | null)[]>(),
+  markedForReview: jsonb("marked_for_review").$type<boolean[]>(),
+  currentIndex: integer("current_index").notNull().default(0),
+  elapsedSec: integer("elapsed_sec").notNull().default(0),
+  isPaused: boolean("is_paused").notNull().default(false),
+  pausedAt: timestamp("paused_at", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   submittedAt: timestamp("submitted_at", { withTimezone: true }),
 });
@@ -151,6 +161,7 @@ export const attempts = pgTable("attempts", {
     onDelete: "set null",
   }),
   mode: text("mode").notNull().default("practice"), // "practice" | "exam"
+  examId: text("exam_id"),
   totalQuestions: integer("total_questions").notNull(),
   correctCount: integer("correct_count").notNull(),
   timeTakenSec: integer("time_taken_sec").notNull().default(0),

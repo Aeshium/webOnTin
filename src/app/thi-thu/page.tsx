@@ -1,7 +1,7 @@
 // Trang thi thử: đề 40 câu trộn chuyên đề và độ khó, 30 phút đếm ngược.
 import type { Metadata } from "next";
-import { getSiteStats } from "@/lib/queries";
-import { QuizExperience } from "@/components/quiz/quiz-experience";
+import { getMockExamStats, getSiteStats } from "@/lib/queries";
+import { MockExamCatalog } from "@/components/quiz/mock-exam-catalog";
 
 export const dynamic = "force-dynamic";
 
@@ -10,21 +10,22 @@ export const metadata: Metadata = {
   description: "Đề thi thử Tin học tổng hợp gồm 40 câu từ 6 chuyên đề, 30 phút đếm ngược.",
 };
 
-export default async function MockExamPage() {
-  const stats = await getSiteStats();
+export default async function MockExamPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ resumeSessionId?: string; resumeGuest?: string }>;
+}) {
+  const params = await searchParams;
+  const resumeSessionId = params.resumeSessionId;
+  const resumeGuest = params.resumeGuest === "1";
+  const [siteStats, examStats] = await Promise.all([getSiteStats(), getMockExamStats()]);
 
   return (
-    <QuizExperience
-      config={{
-        topicId: null, // null = trộn từ tất cả chuyên đề
-        topicName: "Đề thi thử tổng hợp",
-        mode: "exam",
-        colorFrom: "#22d3ee",
-        colorTo: "#a78bfa",
-        totalAvailable: stats.questionCount,
-        examSeconds: 30 * 60,
-        examQuestionCount: Math.min(40, stats.questionCount),
-      }}
+    <MockExamCatalog
+      totalAvailable={siteStats.questionCount}
+      stats={examStats}
+      resumeSessionId={resumeSessionId}
+      resumeGuest={resumeGuest}
     />
   );
 }

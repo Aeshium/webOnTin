@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
@@ -59,8 +59,13 @@ export async function GET() {
     }
   }
 
+  const allNotifications = [...reminders, ...stored].sort((left, right) => {
+    if (Boolean(left.readAt) !== Boolean(right.readAt)) return left.readAt ? 1 : -1;
+    return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+  });
+
   return NextResponse.json({
-    notifications: [...reminders, ...stored],
+    notifications: allNotifications,
     unreadCount: reminders.length + stored.filter((item) => !item.readAt).length,
     daysUntilExam: user.examDate
       ? Math.max(
@@ -78,13 +83,33 @@ export async function GET() {
 export async function PATCH(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Vui lòng đăng nhập." }, { status: 401 });
-  let body: { id?: unknown };
+  let body: { id?: unknown; ids?: unknown };
   try {
     body = await request.json();
   } catch {
     return NextResponse.json({ error: "Thông tin gửi lên không hợp lệ." }, { status: 400 });
   }
-  if (typeof body.id !== "number" || !Number.isInteger(body.id) || body.id <= 0) {
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "Thông tin gửi lên không hợp lệ." }, { status: 400 });
+  }
+  let ids: number[] | null = null;
+  if (
+    Array.isArray(body.ids) &&
+    body.ids.length > 0 &&
+    body.ids.length <= 20 &&
+    body.ids.every(
+      (id): id is number => typeof id === "number" && Number.isInteger(id) && id > 0
+    )
+  ) {
+    ids = [...new Set(body.ids)];
+  } else if (
+    typeof body.id === "number" &&
+    Number.isInteger(body.id) &&
+    body.id > 0
+  ) {
+    ids = [body.id];
+  }
+  if (!ids) {
     return NextResponse.json({ error: "Thông báo không hợp lệ." }, { status: 400 });
   }
   await db
@@ -92,7 +117,7 @@ export async function PATCH(request: NextRequest) {
     .set({ readAt: new Date() })
     .where(
       and(
-        eq(notifications.id, body.id),
+        inArray(notifications.id, ids),
         eq(notifications.userId, user.id),
         isNull(notifications.readAt)
       )

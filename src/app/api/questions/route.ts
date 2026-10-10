@@ -8,6 +8,7 @@ import {
   storeMockExamSession,
 } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/auth";
+import { getMockExam } from "@/lib/mock-exams";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,7 @@ export async function GET(req: NextRequest) {
   const limitRaw = Number(req.nextUrl.searchParams.get("limit") ?? "10");
   const limit = Number.isFinite(limitRaw) ? Math.min(Math.max(1, limitRaw), 50) : 10;
   const mode = req.nextUrl.searchParams.get("mode");
+  const examId = req.nextUrl.searchParams.get("examId");
 
   if (mode === "study") {
     const questions = await getRandomStudyQuestions(topic, limit);
@@ -23,17 +25,31 @@ export async function GET(req: NextRequest) {
   }
   if (mode === "exam") {
     const targetCount = Math.min(limit, 40);
-    const basicCount = Math.ceil(targetCount / 2);
-    const advancedCount = Math.floor(targetCount / 2);
-    const [basic, advanced] = await Promise.all([
-      getRandomQuestions(null, basicCount, "basic"),
-      getRandomQuestions(null, advancedCount, "advanced"),
-    ]);
+    const selectedExam = examId ? getMockExam(examId) : null;
+    if (examId && !selectedExam) {
+      return NextResponse.json({ error: "Đề thi không tồn tại." }, { status: 404 });
+    }
+    const [basic, advanced] = selectedExam
+      ? await Promise.all([
+          getRandomQuestions(null, selectedExam.level === "basic" ? targetCount : 0, "basic"),
+          getRandomQuestions(null, selectedExam.level === "advanced" ? targetCount : 0, "advanced"),
+        ])
+      : await Promise.all([
+          getRandomQuestions(null, Math.ceil(targetCount / 2), "basic"),
+          getRandomQuestions(null, Math.floor(targetCount / 2), "advanced"),
+        ]);
     const selected = [...basic, ...advanced];
     if (selected.length < targetCount) {
       const selectedIds = new Set(selected.map((question) => question.id));
-      const additional = await getRandomQuestions(null, targetCount - selected.length);
+      const additional = await getRandomQuestions(
+        null,
+        targetCount - selected.length,
+        selectedExam?.level
+      );
       selected.push(...additional.filter((question) => !selectedIds.has(question.id)));
+    }
+    if (selected.length < targetCount) {
+      return NextResponse.json({ error: "Chưa đủ câu hỏi cho đề đã chọn." }, { status: 409 });
     }
     for (let index = selected.length - 1; index > 0; index -= 1) {
       const otherIndex = Math.floor(Math.random() * (index + 1));
@@ -43,15 +59,19 @@ export async function GET(req: NextRequest) {
     if (questions.length === 0) {
       return NextResponse.json({ error: "Chưa có câu hỏi để thi thử." }, { status: 404 });
     }
-    const token = createExamSessionToken();
-    await storeMockExamSession({
-      userId: (await getCurrentUser())?.id ?? null,
-      token,
-      questionIds: questions.map((question) => question.id),
-      durationSec: 30 * 60,
-    });
+    const user = await getCurrentUser();
     const response = NextResponse.json(questions);
-    response.headers.set("X-Ontin-Exam-Session", token);
+    if (user) {
+      const token = createExamSessionToken();
+      await storeMockExamSession({
+        userId: user.id,
+        token,
+        questionIds: questions.map((question) => question.id),
+        durationSec: 30 * 60,
+        examId,
+      });
+      response.headers.set("X-Ontin-Exam-Session", token);
+    }
     return response;
   }
   const questions = await getRandomQuestions(topic, limit);

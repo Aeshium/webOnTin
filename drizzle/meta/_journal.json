@@ -36,6 +36,20 @@
       "when": 1791575584711,
       "tag": "0004_sudden_starbolt",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791620677525,
+      "tag": "0005_clever_wrecker",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791624811311,
+      "tag": "0006_noisy_pet_avengers",
+      "breakpoints": true
     }
   ]
 }

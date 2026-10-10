@@ -32,8 +32,15 @@ import {
   ShieldCheck,
   Lightbulb,
   House,
+  LogOut,
 } from "lucide-react";
 import type { PublicQuestion } from "@/lib/queries";
+import {
+  addGuestExamResult,
+  clearGuestPausedExam,
+  hasValidGuestSession,
+  saveGuestPausedExam,
+} from "@/lib/guest-session";
 import {
   ScoreRing,
   ResultReview,
@@ -49,6 +56,7 @@ export type QuizConfig = {
   totalAvailable: number; // số câu hiện có trong DB
   examSeconds?: number; // thờat gian đếm ngược (chế độ thi thử)
   examQuestionCount?: number; // số câu của đề thi thử
+  examId?: string;
 };
 
 type GradeResponse = {
@@ -63,6 +71,15 @@ type QuizQuestion = PublicQuestion & {
   explanation?: string;
 };
 
+export type QuizResumeState = {
+  token: string | null;
+  questions: PublicQuestion[];
+  answers: (number | null)[];
+  markedForReview: boolean[];
+  currentIndex: number;
+  elapsedSec: number;
+};
+
 const LETTERS = ["A", "B", "C", "D"];
 
 function formatTime(sec: number) {
@@ -71,7 +88,15 @@ function formatTime(sec: number) {
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
-export function QuizExperience({ config }: { config: QuizConfig }) {
+export function QuizExperience({
+  config,
+  resumeState,
+  onBackToCatalog,
+}: {
+  config: QuizConfig;
+  resumeState?: QuizResumeState;
+  onBackToCatalog?: () => void;
+}) {
   const [activeMode, setActiveMode] = useState<QuizConfig["mode"]>(config.mode);
   const isExam = activeMode === "exam";
   const isStudy = activeMode === "study";
@@ -87,22 +112,24 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
     ),
   ];
 
-  const [phase, setPhase] = useState<"setup" | "playing" | "result">("setup");
+  const [phase, setPhase] = useState<"setup" | "playing" | "result">(resumeState ? "playing" : "setup");
   const [selectedCount, setSelectedCount] = useState(
     countChoices.includes(10) ? 10 : countChoices[0]
   );
-  const [questions, setQuestions] = useState<QuizQuestion[]>([]);
-  const [answers, setAnswers] = useState<(number | null)[]>([]);
-  const [markedForReview, setMarkedForReview] = useState<boolean[]>([]);
-  const [current, setCurrent] = useState(0);
+  const [questions, setQuestions] = useState<QuizQuestion[]>(resumeState?.questions ?? []);
+  const [answers, setAnswers] = useState<(number | null)[]>(resumeState?.answers ?? []);
+  const [markedForReview, setMarkedForReview] = useState<boolean[]>(resumeState?.markedForReview ?? []);
+  const [current, setCurrent] = useState(resumeState?.currentIndex ?? 0);
   const [direction, setDirection] = useState(1);
-  const [elapsed, setElapsed] = useState(0);
+  const [elapsed, setElapsed] = useState(resumeState?.elapsedSec ?? 0);
   const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<GradeResponse | null>(null);
-  const [examSessionToken, setExamSessionToken] = useState<string | null>(null);
+  const [examSessionToken, setExamSessionToken] = useState<string | null>(resumeState?.token ?? null);
+  const [pauseConfirmOpen, setPauseConfirmOpen] = useState(false);
+  const [pausing, setPausing] = useState(false);
 
   const submittingRef = useRef(false);
 
@@ -140,6 +167,14 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
       });
       if (!res.ok) throw new Error("submit failed");
       const data: GradeResponse = await res.json();
+      if (!examSessionToken && hasValidGuestSession()) clearGuestPausedExam();
+      if (isExam && !examSessionToken && hasValidGuestSession()) {
+        addGuestExamResult({
+          correctCount: data.correctCount,
+          totalQuestions: data.total,
+          timeTakenSec: Math.min(elapsed, examSeconds),
+        });
+      }
       setResult(data);
       setPhase("result");
       window.scrollTo({ top: 0 });
@@ -149,7 +184,7 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
       setSubmitting(false);
       submittingRef.current = false;
     }
-  }, [answers, questions, config, isExam, examSessionToken, activeMode]);
+  }, [answers, questions, config, isExam, examSessionToken, activeMode, elapsed, examSeconds]);
 
   // Hết giờ (thi thử) → tự động nộp
   useEffect(() => {
@@ -167,13 +202,13 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
       const limit = isExam ? examCount : selectedCount;
       const params = new URLSearchParams({ limit: String(limit), mode: activeMode });
       if (config.topicId) params.set("topic", config.topicId);
+      if (config.examId) params.set("examId", config.examId);
       const url = `/api/questions?${params.toString()}`;
       const res = await fetch(url);
       if (!res.ok) throw new Error();
       const sessionToken = isExam
         ? res.headers.get("X-Ontin-Exam-Session")
         : null;
-      if (isExam && !sessionToken) throw new Error("Exam session missing");
       const data = await res.json();
       if (!Array.isArray(data) || data.length === 0) throw new Error();
 
@@ -191,6 +226,44 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
       setError("Không tải được đề. Thử lại sau vài giây nhé!");
     } finally {
       setLoading(false);
+    }
+
+  }
+
+  async function pauseExam() {
+    setPausing(true);
+    setError(null);
+    try {
+      if (!examSessionToken && hasValidGuestSession()) {
+        saveGuestPausedExam({
+          examId: config.examId ?? null,
+          questions,
+          answers,
+          markedForReview,
+          currentIndex: current,
+          elapsedSec: Math.min(elapsed, examSeconds),
+        });
+        window.location.assign("/lich-su");
+        return;
+      }
+      if (!examSessionToken) throw new Error("Phiên thi không hợp lệ. Vui lòng đăng nhập lại.");
+      const response = await fetch("/api/mock-exams/sessions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          token: examSessionToken,
+          answers,
+          markedForReview,
+          currentIndex: current,
+        }),
+      });
+      const data: { error?: string } = await response.json();
+      if (!response.ok) throw new Error(data.error ?? "Không thể lưu tiến trình bài thi.");
+      window.location.assign("/lich-su");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Không thể lưu tiến trình bài thi.");
+      setPauseConfirmOpen(false);
+      setPausing(false);
     }
   }
 
@@ -247,6 +320,17 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
     return (
       <div className="relative mx-auto max-w-2xl px-4 pt-28 pb-24 sm:px-6 lg:pt-36">
         <div className="pointer-events-none absolute top-10 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full blur-[110px]" style={{ background: `${config.colorFrom}26` }} />
+
+        {onBackToCatalog && (
+          <button
+            type="button"
+            onClick={onBackToCatalog}
+            className="mb-4 inline-flex items-center gap-2 rounded-xl border border-white/15 px-4 py-2.5 text-sm font-bold text-slate-200 transition hover:border-white/30 hover:bg-white/5"
+          >
+            <ChevronLeft className="h-4 w-4" />
+            Quay lại chọn đề thi thử
+          </button>
+        )}
 
         <motion.div
           initial={{ opacity: 0, y: 24 }}
@@ -453,6 +537,17 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
                 <AlarmClock className="h-4 w-4" />
                 {formatTime(remaining)}
               </span>
+            )}
+            {isExam && (
+              <button
+                type="button"
+                onClick={() => setPauseConfirmOpen(true)}
+                disabled={pausing || submitting}
+                className="inline-flex items-center gap-2 rounded-full border border-white/15 px-4 py-2 text-xs font-black text-white transition hover:bg-white/10 disabled:opacity-60"
+              >
+                <LogOut className="h-3.5 w-3.5" />
+                Thoát & tạm dừng
+              </button>
             )}
             <button
               onClick={() => setConfirmOpen(true)}
@@ -797,6 +892,50 @@ export function QuizExperience({ config }: { config: QuizConfig }) {
                   >
                     {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" strokeWidth={2.6} />}
                     {isExam ? "Nộp bài" : "Hoàn thành"}
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        <AnimatePresence>
+          {pauseConfirmOpen && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-50 grid place-items-center bg-black/70 p-4 backdrop-blur-sm"
+              onClick={() => !pausing && setPauseConfirmOpen(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.92, opacity: 0, y: 16 }}
+                animate={{ scale: 1, opacity: 1, y: 0 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(event) => event.stopPropagation()}
+                className="glass w-full max-w-md rounded-3xl bg-ink-900/90 p-7"
+              >
+                <h3 className="text-xl font-black text-white">Tạm dừng bài thi?</h3>
+                <p className="mt-2 text-sm leading-relaxed text-slate-400">
+                  Tiến trình {answeredCount}/{questions.length} câu và thời gian còn lại sẽ được lưu vào Lịch sử. Đồng hồ dừng cho đến khi bạn tiếp tục.
+                </p>
+                <div className="mt-6 grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setPauseConfirmOpen(false)}
+                    disabled={pausing}
+                    className="rounded-xl border border-white/15 px-4 py-3 text-sm font-bold text-slate-200 hover:bg-white/5 disabled:opacity-60"
+                  >
+                    Làm tiếp
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void pauseExam()}
+                    disabled={pausing}
+                    className="flex items-center justify-center gap-2 rounded-xl bg-cyan-300 px-4 py-3 text-sm font-black text-ink-950 disabled:opacity-60"
+                  >
+                    {pausing && <Loader2 className="h-4 w-4 animate-spin" />}
+                    {pausing ? "Đang lưu..." : "Tạm dừng"}
                   </button>
                 </div>
               </motion.div>

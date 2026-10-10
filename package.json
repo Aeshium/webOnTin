@@ -12,6 +12,8 @@
     "db:seed": "tsx src/db/seed.ts"
   },
   "dependencies": {
+    "@firebase/app": "^0.16.3",
+    "@firebase/auth": "^1.13.7",
     "dotenv": "17.3.1",
     "drizzle-orm": "0.45.2",
     "framer-motion": "^14.0.0",

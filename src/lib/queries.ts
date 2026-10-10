@@ -55,10 +55,20 @@ export type AttemptSummary = {
   topicColorFrom: string | null;
   topicColorTo: string | null;
   mode: string;
+  examId: string | null;
   totalQuestions: number;
   correctCount: number;
   timeTakenSec: number;
   createdAt: string;
+};
+
+export type PausedExamSummary = {
+  id: number;
+  examId: string | null;
+  questionCount: number;
+  answeredCount: number;
+  elapsedSec: number;
+  pausedAt: string;
 };
 
 export type TopicPerformance = TopicWithCount & {
@@ -164,7 +174,7 @@ export async function countQuestionsInTopic(topicId: string): Promise<number> {
 
 /** Thống kê tổng quan cho trang chủ. */
 function attemptOwnerCondition(userId?: number) {
-  return userId ? eq(attempts.userId, userId) : isNull(attempts.userId);
+  return userId ? eq(attempts.userId, userId) : sql`false`;
 }
 
 function mockExamCondition(userId?: number) {
@@ -297,6 +307,7 @@ export async function storeMockExamSession(input: {
   token: string;
   questionIds: number[];
   durationSec: number;
+  examId?: string | null;
 }) {
   const startedAt = new Date();
   await db.insert(mockExamSessions).values({
@@ -304,8 +315,180 @@ export async function storeMockExamSession(input: {
     tokenHash: hashToken(input.token),
     questionIds: input.questionIds,
     startedAt,
+    examId: input.examId ?? null,
+    answers: Array(input.questionIds.length).fill(null),
+    markedForReview: Array(input.questionIds.length).fill(false),
     expiresAt: new Date(startedAt.getTime() + (input.durationSec + 60) * 1000),
   });
+}
+
+export async function getPublicQuestionsByIds(ids: number[]): Promise<PublicQuestion[]> {
+  if (ids.length === 0) return [];
+  const rows = await db
+    .select({
+      id: questions.id,
+      content: questions.content,
+      options: questions.options,
+      difficulty: questions.difficulty,
+    })
+    .from(questions)
+    .where(inArray(questions.id, ids));
+  const byId = new Map(rows.map((question) => [question.id, question]));
+  return ids.flatMap((id) => {
+    const question = byId.get(id);
+    return question ? [question] : [];
+  });
+}
+
+export async function listPausedMockExams(userId: number): Promise<PausedExamSummary[]> {
+  const rows = await db
+    .select({
+      id: mockExamSessions.id,
+      examId: mockExamSessions.examId,
+      questionIds: mockExamSessions.questionIds,
+      answers: mockExamSessions.answers,
+      elapsedSec: mockExamSessions.elapsedSec,
+      pausedAt: mockExamSessions.pausedAt,
+    })
+    .from(mockExamSessions)
+    .where(and(
+      eq(mockExamSessions.userId, userId),
+      eq(mockExamSessions.isPaused, true),
+      isNull(mockExamSessions.submittedAt),
+      gte(mockExamSessions.expiresAt, new Date())
+    ))
+    .orderBy(desc(mockExamSessions.pausedAt));
+
+  return rows.map((row) => ({
+    id: row.id,
+    examId: row.examId,
+    questionCount: row.questionIds.length,
+    answeredCount: row.answers?.filter((answer) => answer !== null).length ?? 0,
+    elapsedSec: row.elapsedSec,
+    pausedAt: (row.pausedAt ?? new Date()).toISOString(),
+  }));
+}
+
+export async function getMockExamStats() {
+  const rows = await db
+    .select({
+      examId: attempts.examId,
+      attemptCount: sql<number>`count(*)::int`,
+      averagePercent: sql<number>`avg(${attempts.correctCount}::numeric * 100 / nullif(${attempts.totalQuestions}, 0))`,
+    })
+    .from(attempts)
+    .where(and(eq(attempts.mode, "exam"), isNotNull(attempts.examId)))
+    .groupBy(attempts.examId);
+  return Object.fromEntries(rows.map((row) => [
+    row.examId!,
+    { attemptCount: row.attemptCount, averagePercent: row.averagePercent === null ? null : Number(row.averagePercent) },
+  ]));
+}
+
+export async function pauseMockExamSession(input: {
+  userId: number;
+  token: string;
+  answers: (number | null)[];
+  markedForReview: boolean[];
+  currentIndex: number;
+}) {
+  const now = new Date();
+  const [session] = await db
+    .select()
+    .from(mockExamSessions)
+    .where(eq(mockExamSessions.tokenHash, hashToken(input.token)))
+    .limit(1);
+  if (
+    !session ||
+    session.userId !== input.userId ||
+    session.isPaused ||
+    session.submittedAt ||
+    session.expiresAt <= now
+  ) {
+    throw new MockExamSubmissionError("Phiên thi không hợp lệ hoặc đã hết hạn.");
+  }
+  if (
+    input.answers.length !== session.questionIds.length ||
+    input.markedForReview.length !== session.questionIds.length ||
+    input.currentIndex < 0 ||
+    input.currentIndex >= session.questionIds.length
+  ) {
+    throw new MockExamSubmissionError("Tiến trình bài thi không hợp lệ.");
+  }
+  const elapsedSec = Math.min(
+    30 * 60,
+    session.elapsedSec + Math.max(0, Math.floor((now.getTime() - session.startedAt.getTime()) / 1000))
+  );
+  const [paused] = await db
+    .update(mockExamSessions)
+    .set({
+      answers: input.answers,
+      markedForReview: input.markedForReview,
+      currentIndex: input.currentIndex,
+      elapsedSec,
+      isPaused: true,
+      pausedAt: now,
+      expiresAt: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+    })
+    .where(and(
+      eq(mockExamSessions.id, session.id),
+      eq(mockExamSessions.userId, input.userId),
+      eq(mockExamSessions.isPaused, false),
+      isNull(mockExamSessions.submittedAt)
+    ))
+    .returning({ id: mockExamSessions.id });
+  if (!paused) throw new MockExamSubmissionError("Không thể tạm dừng phiên thi.");
+}
+
+export async function resumeMockExamSession(input: { userId: number; sessionId: number }) {
+  const now = new Date();
+  const [session] = await db
+    .select()
+    .from(mockExamSessions)
+    .where(and(
+      eq(mockExamSessions.id, input.sessionId),
+      eq(mockExamSessions.userId, input.userId),
+      eq(mockExamSessions.isPaused, true),
+      isNull(mockExamSessions.submittedAt),
+      gte(mockExamSessions.expiresAt, now)
+    ))
+    .limit(1);
+  if (!session) throw new MockExamSubmissionError("Không tìm thấy bài thi tạm dừng hoặc bài đã hết hạn.");
+  if (session.elapsedSec >= 30 * 60) {
+    throw new MockExamSubmissionError("Bài thi đã hết thời gian và không thể tiếp tục.");
+  }
+  const questionsInSession = await getPublicQuestionsByIds(session.questionIds);
+  if (questionsInSession.length !== session.questionIds.length) {
+    throw new MockExamSubmissionError("Không thể khôi phục đầy đủ câu hỏi của bài thi.");
+  }
+  const token = createExamSessionToken();
+  const remainingSec = 30 * 60 - session.elapsedSec;
+  const [resumed] = await db
+    .update(mockExamSessions)
+    .set({
+      tokenHash: hashToken(token),
+      startedAt: now,
+      isPaused: false,
+      pausedAt: null,
+      expiresAt: new Date(now.getTime() + (remainingSec + 60) * 1000),
+    })
+    .where(and(
+      eq(mockExamSessions.id, session.id),
+      eq(mockExamSessions.isPaused, true),
+      isNull(mockExamSessions.submittedAt),
+      gte(mockExamSessions.expiresAt, now)
+    ))
+    .returning({ id: mockExamSessions.id });
+  if (!resumed) throw new MockExamSubmissionError("Bài thi vừa được tiếp tục ở nơi khác.");
+  return {
+    token,
+    examId: session.examId,
+    questions: questionsInSession,
+    answers: session.answers ?? Array(session.questionIds.length).fill(null),
+    markedForReview: session.markedForReview ?? Array(session.questionIds.length).fill(false),
+    currentIndex: session.currentIndex,
+    elapsedSec: session.elapsedSec,
+  };
 }
 
 /** Chấm bài ôn tập nhưng không ghi attempts hoặc attempt_answers. */
@@ -359,6 +542,7 @@ export async function gradeAndStoreMockExam(input: {
   if (
     !examSession ||
     examSession.submittedAt ||
+    examSession.isPaused ||
     examSession.expiresAt <= new Date() ||
     examSession.userId !== input.userId
   ) {
@@ -379,7 +563,7 @@ export async function gradeAndStoreMockExam(input: {
   }
   const submittedAt = new Date();
   const timeTakenSec = Math.min(
-    Math.max(0, Math.floor((submittedAt.getTime() - examSession.startedAt.getTime()) / 1000)),
+    Math.max(0, examSession.elapsedSec + Math.floor((submittedAt.getTime() - examSession.startedAt.getTime()) / 1000)),
     30 * 60
   );
 
@@ -391,6 +575,7 @@ export async function gradeAndStoreMockExam(input: {
         and(
           eq(mockExamSessions.id, examSession.id),
           isNull(mockExamSessions.submittedAt),
+          eq(mockExamSessions.isPaused, false),
           gte(mockExamSessions.expiresAt, submittedAt)
         )
       )
@@ -406,6 +591,7 @@ export async function gradeAndStoreMockExam(input: {
         userId: input.userId,
         topicId: null,
         mode: "exam",
+        examId: examSession.examId,
         totalQuestions: graded.total,
         correctCount: graded.correctCount,
         timeTakenSec,
@@ -541,6 +727,7 @@ export async function listAttempts(limit = 30, userId?: number): Promise<Attempt
       topicColorFrom: topics.colorFrom,
       topicColorTo: topics.colorTo,
       mode: attempts.mode,
+      examId: attempts.examId,
       totalQuestions: attempts.totalQuestions,
       correctCount: attempts.correctCount,
       timeTakenSec: attempts.timeTakenSec,
@@ -562,6 +749,7 @@ export async function getAttemptDetail(id: number, userId?: number) {
       id: attempts.id,
       topicId: attempts.topicId,
       topicName: topics.name,
+      examId: attempts.examId,
       mode: attempts.mode,
       totalQuestions: attempts.totalQuestions,
       correctCount: attempts.correctCount,

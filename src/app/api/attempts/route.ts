@@ -65,6 +65,12 @@ export async function POST(req: NextRequest) {
   try {
     const userId = (await getCurrentUser())?.id ?? null;
     if (body.mode === "exam") {
+      if (userId === null) {
+        if (body.examSessionToken) {
+          return NextResponse.json({ error: "Phiên thi thử không hợp lệ." }, { status: 400 });
+        }
+        return NextResponse.json(await gradeAnswers(answers));
+      }
       if (typeof body.examSessionToken !== "string" || body.examSessionToken.length < 32) {
         return NextResponse.json({ error: "Phiên thi thử không hợp lệ." }, { status: 400 });
       }

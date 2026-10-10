@@ -3,26 +3,41 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { createSession, hashPassword, setSessionCookie } from "@/lib/auth";
+import { validatePassword } from "@/lib/password-policy";
 
 export async function POST(request: NextRequest) {
-  let body: { name?: unknown; email?: unknown; password?: unknown };
+  let body: {
+    name?: unknown;
+    email?: unknown;
+    password?: unknown;
+    confirmPassword?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
+    return NextResponse.json({ error: "Thông tin gửi lên không hợp lệ." }, { status: 400 });
+  }
+  if (!body || typeof body !== "object") {
     return NextResponse.json({ error: "Thông tin gửi lên không hợp lệ." }, { status: 400 });
   }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
   const email = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
   const password = typeof body.password === "string" ? body.password : "";
+  const confirmPassword =
+    typeof body.confirmPassword === "string" ? body.confirmPassword : "";
   if (name.length < 2 || name.length > 80) {
     return NextResponse.json({ error: "Tên cần có từ 2 đến 80 ký tự." }, { status: 400 });
   }
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || email.length > 254) {
     return NextResponse.json({ error: "Email không hợp lệ." }, { status: 400 });
   }
-  if (password.length < 10 || password.length > 128) {
-    return NextResponse.json({ error: "Mật khẩu cần có từ 10 đến 128 ký tự." }, { status: 400 });
+  const passwordError = validatePassword(password);
+  if (passwordError) {
+    return NextResponse.json({ error: passwordError }, { status: 400 });
+  }
+  if (password !== confirmPassword) {
+    return NextResponse.json({ error: "Mật khẩu xác nhận không khớp." }, { status: 400 });
   }
 
   const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, email)).limit(1);

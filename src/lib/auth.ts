@@ -2,7 +2,7 @@ import { createHash, randomBytes, scrypt, timingSafeEqual } from "node:crypto";
 import { promisify } from "node:util";
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { sessions, users } from "@/db/schema";
 
@@ -24,8 +24,11 @@ export type PublicUser = Pick<
   typeof users.$inferSelect,
   | "id"
   | "name"
+  | "schoolName"
+  | "className"
   | "email"
   | "background"
+  | "avatarUrl"
   | "examDate"
   | "lastLoginAt"
   | "equippedAchievementKey"
@@ -72,8 +75,16 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
     .select({
       id: users.id,
       name: users.name,
+      schoolName: users.schoolName,
+      className: users.className,
       email: users.email,
       background: users.background,
+      avatarUrl: sql<string | null>`
+        case
+          when ${users.avatarUrl} like 'data:image/%' then '/api/profile/avatar'
+          else ${users.avatarUrl}
+        end
+      `.as("avatar_url"),
       examDate: users.examDate,
       lastLoginAt: users.lastLoginAt,
       equippedAchievementKey: users.equippedAchievementKey,
@@ -88,5 +99,6 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
     )
     .limit(1);
 
-  return session ?? null;
+  if (!session) return null;
+  return session;
 }

@@ -17,6 +17,16 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { getAchievement } from "@/lib/achievements";
+import { clearGuestSession } from "@/lib/guest-session";
+
+type NotificationItem = {
+  id: number | null;
+  title: string;
+  message: string;
+  readAt: string | null;
+  createdAt: string;
+  kind?: "reminder" | "exam";
+};
 
 const NAV_LINKS = [
   { href: "/", label: "Trang chủ" },
@@ -29,10 +39,18 @@ export function SiteNavbar() {
   const router = useRouter();
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const [activePopover, setActivePopover] = useState<"notifications" | "account" | null>(null);
+  const [latestNotifications, setLatestNotifications] = useState<NotificationItem[]>([]);
+  const [notificationError, setNotificationError] = useState("");
+  const desktopNotificationPopoverRef = useRef<HTMLDivElement>(null);
+  const desktopAccountPopoverRef = useRef<HTMLDivElement>(null);
+  const mobileNotificationPopoverRef = useRef<HTMLDivElement>(null);
+  const mobileAccountPopoverRef = useRef<HTMLDivElement>(null);
   const [account, setAccount] = useState<{
     name: string;
     examDate: string | null;
     equippedAchievementKey: string | null;
+    avatarUrl: string | null;
   } | null>(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [toast, setToast] = useState<{
@@ -51,16 +69,11 @@ export function SiteNavbar() {
       if (!response.ok) return;
       const data: {
         unreadCount: number;
-        notifications: Array<{
-          id: number | null;
-          title: string;
-          message: string;
-          readAt: string | null;
-          kind?: string;
-        }>;
+        notifications: NotificationItem[];
       } = await response.json();
       if (!active) return;
 
+      setLatestNotifications(data.notifications);
       setUnreadCount(data.unreadCount);
       if (firstNotificationLoad) {
         firstNotificationLoad = false;
@@ -97,6 +110,7 @@ export function SiteNavbar() {
                 name: user.name,
                 examDate: user.examDate,
                 equippedAchievementKey: user.equippedAchievementKey ?? null,
+                avatarUrl: user.avatarUrl ?? null,
               }
             : null
         );
@@ -128,6 +142,80 @@ export function SiteNavbar() {
     return () => window.clearTimeout(timeout);
   }, [toast]);
 
+  useEffect(() => {
+    if (!activePopover) return;
+    function onPointerDown(event: PointerEvent) {
+      const target = event.target;
+      if (!(target instanceof Node)) return;
+      if (
+        desktopNotificationPopoverRef.current?.contains(target) ||
+        desktopAccountPopoverRef.current?.contains(target) ||
+        mobileNotificationPopoverRef.current?.contains(target) ||
+        mobileAccountPopoverRef.current?.contains(target)
+      ) {
+        return;
+      }
+      setActivePopover(null);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") setActivePopover(null);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [activePopover]);
+
+  async function markLatestNotificationsRead() {
+    const visible = latestNotifications.slice(0, 5);
+    const unread = visible.filter((notification) => !notification.readAt);
+    if (unread.length === 0) return;
+    const readAt = new Date().toISOString();
+    const ids = unread
+      .map((notification) => notification.id)
+      .filter((id): id is number => id !== null);
+    setLatestNotifications((items) =>
+      items.map((item) =>
+        unread.some((notification) => notificationKey(notification) === notificationKey(item))
+          ? { ...item, readAt }
+          : item
+      )
+    );
+    setUnreadCount((count) => Math.max(0, count - unread.length));
+    setNotificationError("");
+    if (ids.length === 0) return;
+    try {
+      const response = await fetch("/api/notifications", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ids }),
+      });
+      if (!response.ok) throw new Error("Không thể cập nhật trạng thái thông báo.");
+    } catch (error) {
+      console.error("Đánh dấu thông báo đã đọc thất bại:", error);
+      setNotificationError("Không thể cập nhật trạng thái thông báo. Hãy thử lại.");
+      setLatestNotifications((items) =>
+        items.map((item) =>
+          unread.some((notification) => notificationKey(notification) === notificationKey(item))
+            ? { ...item, readAt: null }
+            : item
+        )
+      );
+      setUnreadCount((count) => count + unread.length);
+    }
+  }
+
+  function togglePopover(popover: "notifications" | "account") {
+    if (activePopover === popover) {
+      setActivePopover(null);
+      return;
+    }
+    setActivePopover(popover);
+    if (popover === "notifications") void markLatestNotificationsRead();
+  }
+
   async function signOut() {
     const response = await fetch("/api/auth/logout", { method: "POST" });
     if (!response.ok) {
@@ -136,7 +224,8 @@ export function SiteNavbar() {
     }
     setAccount(null);
     setUnreadCount(0);
-    router.refresh();
+    clearGuestSession();
+    window.location.assign("/dang-nhap");
   }
 
   // Đổi nền navbar khi cuộn xuống — JS thuần quen thuộc.
@@ -207,31 +296,77 @@ export function SiteNavbar() {
 
           {account ? (
             <div className="hidden items-center gap-2 sm:flex">
-              <Link
-                href="/thong-bao"
-                aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}
-                title="Thông báo"
-                className="relative grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 hover:text-cyan-200"
-              >
-                <Bell className="h-4 w-4" />
-                {unreadCount > 0 && <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-400 px-1 text-[9px] font-black text-ink-950">{unreadCount > 9 ? "9+" : unreadCount}</span>}
-              </Link>
-              <details className="group relative">
-                <summary
+              <div ref={desktopNotificationPopoverRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => togglePopover("notifications")}
+                  aria-expanded={activePopover === "notifications"}
+                  aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}
+                  title="Thông báo"
+                  className="relative grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-white/5 text-slate-300 hover:text-cyan-200"
+                >
+                  <Bell className="h-4 w-4" />
+                  {unreadCount > 0 && <span className="absolute -top-1 -right-1 grid h-4 min-w-4 place-items-center rounded-full bg-rose-400 px-1 text-[9px] font-black text-ink-950">{unreadCount > 9 ? "9+" : unreadCount}</span>}
+                </button>
+                {activePopover === "notifications" && (
+                  <div className="absolute top-full right-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-ink-900 shadow-2xl shadow-black/40">
+                    <div className="border-b border-white/8 px-4 py-3">
+                      <p className="font-bold text-white">Thông báo gần đây</p>
+                    </div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {notificationError && <p role="alert" className="px-4 py-3 text-xs text-rose-300">{notificationError}</p>}
+                      {latestNotifications.slice(0, 5).map((notification, index) => (
+                        <article
+                          key={notification.id ?? `${notification.kind}-${notification.title}-${index}`}
+                          className="flex gap-3 border-b border-white/5 px-4 py-3 last:border-b-0"
+                        >
+                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notification.readAt ? "bg-transparent" : "bg-rose-400"}`} aria-label={notification.readAt ? undefined : "Chưa đọc"} />
+                          <div className="min-w-0">
+                            <p className={`text-sm font-bold ${notification.readAt ? "text-slate-300" : "text-white"}`}>{notification.title}</p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-400">{notification.message}</p>
+                          </div>
+                        </article>
+                      ))}
+                      {latestNotifications.length === 0 && (
+                        <p className="px-4 py-6 text-center text-sm text-slate-400">Bạn chưa có thông báo.</p>
+                      )}
+                    </div>
+                    <Link
+                      href="/thong-bao"
+                      onClick={() => setActivePopover(null)}
+                      className="block border-t border-white/8 px-4 py-3 text-center text-xs font-bold text-cyan-200 hover:bg-white/5"
+                    >
+                      Đến trang thông báo
+                    </Link>
+                  </div>
+                )}
+              </div>
+              <div ref={desktopAccountPopoverRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => togglePopover("account")}
+                  aria-expanded={activePopover === "account"}
                   aria-label={`Tài khoản ${account.name}${getAchievement(account.equippedAchievementKey) ? `, danh hiệu ${getAchievement(account.equippedAchievementKey)?.name}` : ""}`}
                   title={getAchievement(account.equippedAchievementKey)?.name ?? account.name}
-                  className="relative grid h-10 w-10 cursor-pointer list-none place-items-center rounded-full border border-white/10 bg-violet-400/15 text-violet-200 hover:bg-violet-400/25"
+                  className="relative grid h-10 w-10 place-items-center rounded-full border border-white/10 bg-violet-400/15 text-violet-200 hover:bg-violet-400/25"
                 >
-                  <UserRound className="h-4 w-4" />
+                  {account.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={account.avatarUrl} alt="" className="h-10 w-10 rounded-full object-cover" />
+                  ) : (
+                    <UserRound className="h-4 w-4" />
+                  )}
                   {getAchievement(account.equippedAchievementKey) && <Award className="absolute -right-1 -bottom-1 h-4 w-4 rounded-full bg-ink-950 text-amber-300" />}
-                </summary>
-                <div className="absolute top-full right-0 z-20 mt-2 w-48 rounded-2xl border border-white/10 bg-ink-900 p-2 shadow-2xl">
-                  <Link href="/tai-khoan" className="block rounded-xl px-3 py-2 text-sm font-semibold text-white hover:bg-white/5">Hồ sơ tài khoản</Link>
-                  <button onClick={() => void signOut()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
+                </button>
+                {activePopover === "account" && (
+                  <div className="absolute top-full right-0 z-30 mt-2 w-48 rounded-2xl border border-white/10 bg-ink-900 p-2 shadow-2xl">
+                    <Link href="/tai-khoan" onClick={() => setActivePopover(null)} className="block rounded-xl px-3 py-2 text-sm font-semibold text-white hover:bg-white/5">Hồ sơ tài khoản</Link>
+                    <button onClick={() => void signOut()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
                     <LogOut className="h-4 w-4" /> Đăng xuất
-                  </button>
-                </div>
-              </details>
+                    </button>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <Link href="/dang-nhap" className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/5 py-1.5 pr-3 pl-2 text-xs font-bold text-slate-300 hover:text-white sm:flex">
@@ -317,21 +452,62 @@ export function SiteNavbar() {
           </Link>
           {account ? (
             <div className="mt-3 flex items-center justify-between px-4 text-xs">
-              <details className="group relative">
-                <summary className="flex cursor-pointer list-none items-center gap-2 text-slate-300">
-                  <UserRound className="h-4 w-4" />{account.name}
+              <div ref={mobileAccountPopoverRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => togglePopover("account")}
+                  aria-expanded={activePopover === "account"}
+                  className="flex items-center gap-2 text-slate-300"
+                >
+                  {account.avatarUrl ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={account.avatarUrl} alt="" className="h-8 w-8 rounded-full object-cover" />
+                  ) : (
+                    <UserRound className="h-4 w-4" />
+                  )}
+                  {account.name}
                   {getAchievement(account.equippedAchievementKey) && <Award className="h-4 w-4 text-amber-300" />}
-                </summary>
-                <div className="mt-2 flex items-center gap-4 rounded-xl bg-white/5 p-3">
-                  <Link href="/tai-khoan" onClick={() => setOpen(false)} className="text-slate-200">Hồ sơ</Link>
-                  <button onClick={() => void signOut()} className="flex items-center gap-1 text-slate-400">
+                </button>
+                {activePopover === "account" && (
+                  <div className="absolute top-full left-0 z-30 mt-2 w-48 rounded-2xl border border-white/10 bg-ink-900 p-2 shadow-2xl">
+                    <Link href="/tai-khoan" onClick={() => { setOpen(false); setActivePopover(null); }} className="block rounded-xl px-3 py-2 text-sm font-semibold text-white hover:bg-white/5">Hồ sơ tài khoản</Link>
+                    <button onClick={() => void signOut()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm font-semibold text-slate-300 hover:bg-white/5 hover:text-white">
                     <LogOut className="h-3.5 w-3.5" />Đăng xuất
-                  </button>
-                </div>
-              </details>
-              <Link href="/thong-bao" onClick={() => setOpen(false)} className="flex items-center gap-2 text-cyan-200">
-                <Bell className="h-4 w-4" />Thông báo{unreadCount ? ` (${unreadCount})` : ""}
-              </Link>
+                    </button>
+                  </div>
+                )}
+              </div>
+              <div ref={mobileNotificationPopoverRef} className="relative">
+                <button
+                  type="button"
+                  onClick={() => togglePopover("notifications")}
+                  aria-expanded={activePopover === "notifications"}
+                  aria-label={`Thông báo${unreadCount ? `, ${unreadCount} chưa đọc` : ""}`}
+                  className="relative flex items-center gap-2 text-cyan-200"
+                >
+                  <Bell className="h-4 w-4" />Thông báo
+                  {unreadCount > 0 && <span className="absolute -top-1 -left-1 h-2 w-2 rounded-full bg-rose-400" />}
+                </button>
+                {activePopover === "notifications" && (
+                  <div className="absolute top-full right-0 z-30 mt-2 w-[min(22rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-white/10 bg-ink-900 text-left shadow-2xl shadow-black/40">
+                    <div className="border-b border-white/8 px-4 py-3 text-sm font-bold text-white">Thông báo gần đây</div>
+                    <div className="max-h-80 overflow-y-auto">
+                      {notificationError && <p role="alert" className="px-4 py-3 text-xs text-rose-300">{notificationError}</p>}
+                      {latestNotifications.slice(0, 5).map((notification, index) => (
+                        <article key={notification.id ?? `${notification.kind}-${notification.title}-${index}`} className="flex gap-3 border-b border-white/5 px-4 py-3 last:border-b-0">
+                          <span className={`mt-1.5 h-2 w-2 shrink-0 rounded-full ${notification.readAt ? "bg-transparent" : "bg-rose-400"}`} />
+                          <div className="min-w-0">
+                            <p className={`text-sm font-bold ${notification.readAt ? "text-slate-300" : "text-white"}`}>{notification.title}</p>
+                            <p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-400">{notification.message}</p>
+                          </div>
+                        </article>
+                      ))}
+                      {latestNotifications.length === 0 && <p className="px-4 py-6 text-center text-sm text-slate-400">Bạn chưa có thông báo.</p>}
+                    </div>
+                    <Link href="/thong-bao" onClick={() => { setOpen(false); setActivePopover(null); }} className="block border-t border-white/8 px-4 py-3 text-center text-xs font-bold text-cyan-200 hover:bg-white/5">Đến trang thông báo</Link>
+                  </div>
+                )}
+              </div>
             </div>
           ) : (
             <Link href="/dang-nhap" onClick={() => setOpen(false)} className="mt-3 flex items-center gap-2 px-4 text-xs text-slate-300">

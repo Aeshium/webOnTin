@@ -8,6 +8,7 @@ import { db } from "./index";
 import { eq } from "drizzle-orm";
 import { topics, questions, attemptAnswers, attempts } from "./schema";
 import { getAdvancedQuestions, getExpandedQuestions } from "./question-expansion";
+import { getAdditionalQuestions } from "./question-additions";
 
 const TOPIC_DATA: Array<{
   id: string;
@@ -620,9 +621,48 @@ async function main() {
       await db.insert(questions).values(newAdvancedQuestions);
     }
 
-    insertedQuestions += newQuestions.length + newAdvancedQuestions.length;
+    const additionCandidates = getAdditionalQuestions(t.id);
+    if (additionCandidates.length !== 50 || new Set(additionCandidates.map((question) => question.content)).size !== 50) {
+      throw new Error(`${t.name}: bộ câu hỏi bổ sung phải có đúng 50 câu.`);
+    }
+    const targetAdditions = Math.max(
+      0,
+      100 - existingQuestions.length - newQuestions.length - newAdvancedQuestions.length
+    );
+    const additions = additionCandidates
+      .filter((question) => !existingContent.has(question.content))
+      .slice(0, targetAdditions);
+    for (const question of additionCandidates) {
+      if (additions.length >= targetAdditions) break;
+      if (!existingContent.has(question.content)) continue;
+      let content = `${question.content} [Bổ sung]`;
+      if (existingContent.has(content)) continue;
+      let suffix = 2;
+      while (existingContent.has(content)) {
+        content = `${question.content} [Bổ sung ${suffix}]`;
+        suffix += 1;
+      }
+      additions.push({ ...question, content });
+      existingContent.add(content);
+    }
+    if (additions.length !== targetAdditions) {
+      throw new Error(`${t.name}: không thể bổ sung đủ để đạt 100 câu.`);
+    }
+    if (additions.length > 0) {
+      await db.insert(questions).values(additions.map((question) => ({
+        topicId: t.id,
+        content: question.content,
+        options: question.options,
+        correctIndex: question.correctIndex,
+        explanation: question.explanation,
+        difficulty: question.difficulty,
+      })));
+    }
+    for (const question of additions) existingContent.add(question.content);
+
+    insertedQuestions += newQuestions.length + newAdvancedQuestions.length + additions.length;
     console.log(
-      `  ✓ ${t.name}: ${totalAfterBasic + newAdvancedQuestions.length}/50 câu (${newQuestions.length + newAdvancedQuestions.length} câu mới)`
+      `  ✓ ${t.name}: ${totalAfterBasic + newAdvancedQuestions.length + additions.length} câu (${newQuestions.length + newAdvancedQuestions.length + additions.length} câu mới)`
     );
   }
 

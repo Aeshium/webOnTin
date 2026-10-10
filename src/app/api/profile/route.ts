@@ -4,7 +4,15 @@ import { db } from "@/db";
 import { notifications, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 
-const BACKGROUNDS = new Set(["aurora", "ocean", "sunset", "forest"]);
+const BACKGROUNDS = new Set([
+  "aurora",
+  "ocean",
+  "sunset",
+  "forest",
+  "rose",
+  "lavender",
+  "midnight",
+]);
 
 export async function GET() {
   const user = await getCurrentUser();
@@ -16,7 +24,13 @@ export async function PATCH(request: NextRequest) {
   const user = await getCurrentUser();
   if (!user) return NextResponse.json({ error: "Vui lòng đăng nhập." }, { status: 401 });
 
-  let body: { name?: unknown; background?: unknown; examDate?: unknown };
+  let body: {
+    name?: unknown;
+    schoolName?: unknown;
+    className?: unknown;
+    background?: unknown;
+    examDate?: unknown;
+  };
   try {
     body = await request.json();
   } catch {
@@ -24,10 +38,15 @@ export async function PATCH(request: NextRequest) {
   }
 
   const name = typeof body.name === "string" ? body.name.trim() : "";
+  const schoolName = typeof body.schoolName === "string" ? body.schoolName.trim() : "";
+  const className = typeof body.className === "string" ? body.className.trim() : "";
   const background = typeof body.background === "string" ? body.background : "";
   const examDateValue = body.examDate;
   if (name.length < 2 || name.length > 80) {
     return NextResponse.json({ error: "Tên cần có từ 2 đến 80 ký tự." }, { status: 400 });
+  }
+  if (schoolName.length > 120 || className.length > 80) {
+    return NextResponse.json({ error: "Tên trường tối đa 120 ký tự, tên lớp tối đa 80 ký tự." }, { status: 400 });
   }
   if (!BACKGROUNDS.has(background)) {
     return NextResponse.json({ error: "Mẫu hình nền không hợp lệ." }, { status: 400 });
@@ -48,7 +67,13 @@ export async function PATCH(request: NextRequest) {
 
   const dateChanged = user.examDate?.toISOString().slice(0, 10) !== (examDate?.toISOString().slice(0, 10) ?? null);
   await db.transaction(async (tx) => {
-    await tx.update(users).set({ name, background, examDate }).where(eq(users.id, user.id));
+    await tx.update(users).set({
+      name,
+      schoolName: schoolName || null,
+      className: className || null,
+      background,
+      examDate,
+    }).where(eq(users.id, user.id));
     if (dateChanged && examDate) {
       await tx.insert(notifications).values({
         userId: user.id,

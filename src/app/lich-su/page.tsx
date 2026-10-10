@@ -13,5 +13,5 @@ export const metadata: Metadata = {
 export default async function HistoryPage() {
   const user = await getCurrentUser();
   const attempts = await listAttempts(30, user?.id);
-  return <HistoryClient attempts={attempts} />;
+  return <HistoryClient attempts={attempts} isGuest={!user} />;
 }
