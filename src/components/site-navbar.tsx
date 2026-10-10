@@ -18,6 +18,7 @@ import {
 import { useRouter } from "next/navigation";
 import { getAchievement } from "@/lib/achievements";
 import { clearGuestSession } from "@/lib/guest-session";
+import { TopicsLink } from "@/components/topics-link";
 
 type NotificationItem = {
   id: number | null;
@@ -257,13 +258,22 @@ export function SiteNavbar() {
 
           <nav aria-label="Điều hướng chính" className="hidden items-center gap-1 lg:flex">
             {NAV_LINKS.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                className="rounded-full px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
-              >
-                {l.label}
-              </Link>
+              l.href === "/#chuyen-de" ? (
+                <TopicsLink
+                  key={l.href}
+                  className="rounded-full px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  {l.label}
+                </TopicsLink>
+              ) : (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  className="rounded-full px-3 py-2 text-sm font-medium text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
+                >
+                  {l.label}
+                </Link>
+              )
             ))}
           </nav>
         </div>
@@ -432,14 +442,24 @@ export function SiteNavbar() {
           )}
           <nav aria-label="Điều hướng chính trên di động">
             {NAV_LINKS.map((l) => (
-              <Link
-                key={l.href}
-                href={l.href}
-                onClick={() => setOpen(false)}
-                className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/5"
-              >
-                {l.label}
-              </Link>
+              l.href === "/#chuyen-de" ? (
+                <TopicsLink
+                  key={l.href}
+                  onClick={() => setOpen(false)}
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/5"
+                >
+                  {l.label}
+                </TopicsLink>
+              ) : (
+                <Link
+                  key={l.href}
+                  href={l.href}
+                  onClick={() => setOpen(false)}
+                  className="block rounded-xl px-4 py-3 text-sm font-medium text-slate-300 hover:bg-white/5"
+                >
+                  {l.label}
+                </Link>
+              )
             ))}
           </nav>
           <Link

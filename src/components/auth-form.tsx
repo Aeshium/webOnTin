@@ -4,6 +4,16 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
+import {
+  Atom,
+  BookOpenCheck,
+  BrainCircuit,
+  CircuitBoard,
+  GraduationCap,
+  Sparkles,
+  Target,
+  Zap,
+} from "lucide-react";
 import { GoogleAuthProvider, signInWithPopup } from "@firebase/auth";
 import { validatePassword } from "@/lib/password-policy";
 import { clearGuestSession, safeNextPath, startGuestSession } from "@/lib/guest-session";
@@ -153,20 +163,91 @@ export function AuthForm({
   }
 
   return (
-    <main className="mx-auto flex min-h-[75vh] max-w-lg items-center px-4 pt-24 pb-16">
-      <section className="w-full rounded-3xl border border-white/10 bg-ink-900/80 p-6 shadow-2xl shadow-black/20 sm:p-9">
-        <p className="text-xs font-bold tracking-[0.2em] text-cyan-300 uppercase">ÔnTin · Tài khoản</p>
-        <h1 className="mt-3 text-3xl font-black text-white">{copy.title}</h1>
+    <main className={mode === "login"
+      ? "relative isolate grid min-h-svh overflow-hidden bg-ink-950 lg:grid-cols-5"
+      : "mx-auto flex min-h-[75vh] max-w-lg items-center px-4 pt-24 pb-16"
+    }>
+      {mode === "login" && (
+        <aside className="relative flex min-h-[34vh] flex-col justify-between overflow-hidden border-b border-white/8 bg-[#070b18] px-6 py-7 sm:px-10 lg:col-span-3 lg:min-h-svh lg:border-r lg:border-b-0 lg:px-14 lg:py-12 xl:px-20">
+          <div className="bg-grid pointer-events-none absolute inset-0 opacity-80" />
+          <div className="pointer-events-none absolute -top-28 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-[100px]" />
+          <div className="pointer-events-none absolute right-[-5rem] bottom-[-6rem] h-96 w-96 rounded-full bg-violet-500/15 blur-[120px]" />
+
+          <Link href="/" className="relative z-10 inline-flex w-fit items-center gap-3">
+            <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 via-violet-400 to-pink-400 text-ink-950 shadow-lg shadow-violet-500/20">
+              <GraduationCap className="h-6 w-6" strokeWidth={2.5} />
+            </span>
+            <span className="text-2xl font-black tracking-tight text-white">Ôn<span className="text-gradient">Tin</span></span>
+          </Link>
+
+          <div className="relative z-10 my-8 max-w-2xl lg:my-0 lg:py-14">
+            <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/8 px-3.5 py-2 text-xs font-bold tracking-wide text-cyan-100">
+              <Sparkles className="h-3.5 w-3.5 text-cyan-300" />
+              CHINH PHỤC TIN HỌC, TỪNG CÂU HỎI MỘT
+            </span>
+            <h2 className="mt-6 max-w-xl text-4xl leading-[1.12] font-black tracking-tight text-white sm:text-5xl xl:text-6xl">
+              Học vững hôm nay.
+              <span className="mt-2 block text-gradient">Tự tin ngày mai.</span>
+            </h2>
+            <p className="mt-5 max-w-lg text-sm leading-7 text-slate-400 sm:text-base">
+              Ôn tập theo chuyên đề, luyện đề có tính giờ và hiểu rõ từng đáp án trên hành trình chinh phục môn Tin học.
+            </p>
+
+            <div className="mt-8 grid max-w-xl grid-cols-3 gap-3 sm:gap-4">
+              {[
+                { icon: BookOpenCheck, label: "Ôn theo chủ đề", color: "text-cyan-200", glow: "bg-cyan-300/10" },
+                { icon: Target, label: "Luyện đề sát giờ", color: "text-violet-200", glow: "bg-violet-300/10" },
+                { icon: BrainCircuit, label: "Hiểu từng đáp án", color: "text-pink-200", glow: "bg-pink-300/10" },
+              ].map(({ icon: Icon, label, color, glow }) => (
+                <div key={label} className="rounded-2xl border border-white/8 bg-white/[0.035] p-3 sm:p-4">
+                  <span className={`grid h-9 w-9 place-items-center rounded-xl ${glow} ${color}`}>
+                    <Icon className="h-4.5 w-4.5" />
+                  </span>
+                  <p className="mt-3 text-[11px] leading-4 font-bold text-slate-300 sm:text-xs">{label}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="relative z-10 hidden overflow-hidden border-y border-white/8 py-4 lg:block">
+            <div className="animate-marquee flex w-max items-center gap-9 whitespace-nowrap text-xs font-bold tracking-wide text-slate-500">
+              {Array.from({ length: 2 }, (_, repeat) => (
+                <span key={repeat} className="flex items-center gap-9">
+                  <span className="inline-flex items-center gap-2"><CircuitBoard className="h-4 w-4 text-cyan-300" /> PHẦN CỨNG</span>
+                  <span className="inline-flex items-center gap-2"><Atom className="h-4 w-4 text-violet-300" /> HỆ ĐIỀU HÀNH</span>
+                  <span className="inline-flex items-center gap-2"><Zap className="h-4 w-4 text-amber-300" /> MẠNG & INTERNET</span>
+                  <span className="inline-flex items-center gap-2"><BookOpenCheck className="h-4 w-4 text-pink-300" /> WORD · EXCEL · SQL</span>
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <p className="relative z-10 hidden pt-5 text-xs text-slate-600 lg:block">
+            Học có kế hoạch · Luyện tập có mục tiêu · Tiến bộ mỗi ngày
+          </p>
+        </aside>
+      )}
+
+      <div className={mode === "login"
+        ? "relative flex min-h-[66vh] items-center justify-center px-4 py-8 sm:px-8 lg:col-span-2 lg:min-h-svh lg:px-8 xl:px-14"
+        : "w-full"
+      }>
+      <section className={mode === "login"
+        ? "w-full max-w-md rounded-3xl border border-white/10 bg-white/[0.035] p-5 shadow-2xl shadow-black/25 backdrop-blur-xl sm:p-7"
+        : "w-full rounded-3xl border border-white/10 bg-ink-900/80 p-6 shadow-2xl shadow-black/20 sm:p-9"
+      }>
+        {mode !== "login" && <p className="text-xs font-bold tracking-[0.2em] text-cyan-300 uppercase">ÔnTin · Tài khoản</p>}
+        <h1 className={`${mode === "login" ? "text-2xl sm:text-3xl" : "mt-3 text-3xl"} font-black text-white`}>{copy.title}</h1>
         <p className="mt-2 text-sm leading-6 text-slate-400">{copy.description}</p>
         {mode === "login" && (
-          <div className="mt-6 space-y-3">
+          <div className="mt-5 space-y-2.5">
             <button
               type="button"
               onClick={() => {
                 startGuestSession();
                 window.location.assign(safeNextPath(nextPath));
               }}
-              className="w-full rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-5 py-3 text-left transition hover:bg-cyan-300/15"
+              className="w-full rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-2.5 text-left transition hover:bg-cyan-300/15"
             >
               <span className="block text-sm font-bold text-cyan-100">Vào với tư cách Guest</span>
               <span className="mt-1 block text-xs font-medium text-cyan-100/60">
@@ -177,7 +258,7 @@ export function AuthForm({
               type="button"
               onClick={() => void signInWithGoogle()}
               disabled={busy}
-              className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/12 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-60"
+              className="flex w-full items-center justify-center gap-3 rounded-xl border border-white/12 bg-white/5 px-5 py-2.5 text-sm font-bold text-white transition hover:bg-white/10 disabled:opacity-60"
             >
               <GoogleMark />
               Tiếp tục với Google
@@ -194,7 +275,7 @@ export function AuthForm({
             </div>
           </div>
         )}
-        <form className="mt-7 space-y-4" onSubmit={submit}>
+        <form className={`${mode === "login" ? "mt-4 space-y-3" : "mt-7 space-y-4"}`} onSubmit={submit}>
           {mode === "register" && (
             <Field label="Tên hiển thị" name="name" autoComplete="name" required minLength={2} maxLength={80} />
           )}
@@ -247,6 +328,7 @@ export function AuthForm({
           {mode === "reset" && <Link className="hover:text-cyan-200" href="/dang-nhap">Đăng nhập</Link>}
         </div>
       </section>
+      </div>
     </main>
   );
 }

@@ -18,6 +18,7 @@ import type {
 } from "@/lib/queries";
 import { TopicCard } from "@/components/topic-card";
 import { ScrollToTopicsButton } from "@/components/scroll-to-topics-button";
+import { TopicsLink } from "@/components/topics-link";
 
 type DashboardProps = {
   topics: TopicPerformance[];
@@ -432,12 +433,11 @@ export function Dashboard({
                   Đây là chuyên đề có điểm trung bình thấp nhất trong các
                   chuyên đề đã làm. Ôn thêm một lượt để củng cố kiến thức nhé.
                 </p>
-                <Link
-                  href={`/luyen-thi/${weakestTopic.id}`}
+                <TopicsLink
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-300 px-4 py-2.5 text-sm font-black text-ink-950 transition hover:brightness-110"
                 >
-                  Ôn chuyên đề này <ArrowRight className="h-4 w-4" />
-                </Link>
+                  Xem chuyên đề <ArrowRight className="h-4 w-4" />
+                </TopicsLink>
               </>
             ) : (
               <>
@@ -448,12 +448,11 @@ export function Dashboard({
                   Sau khi có kết quả luyện tập, dashboard sẽ gợi ý chuyên đề
                   cần ôn thêm dựa trên điểm trung bình.
                 </p>
-                <Link
-                  href="#chuyen-de"
+                <TopicsLink
                   className="mt-4 inline-flex items-center gap-2 rounded-xl bg-violet-300 px-4 py-2.5 text-sm font-black text-ink-950 transition hover:brightness-110"
                 >
                   Xem chuyên đề <ArrowRight className="h-4 w-4" />
-                </Link>
+                </TopicsLink>
               </>
             )}
           </section>
