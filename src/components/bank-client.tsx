@@ -2,7 +2,7 @@
 // Client Component của trang Tra cứu:
 // - Gõ từ khóa / chọn chuyên đề → debounce 300ms → fetch GET /api/bank → hiển thị.
 // - Bấm vào câu hỏi để xổ đáp án đúng + giải thích (accordion).
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, Loader2, ChevronDown, Check, Lightbulb } from "lucide-react";
 
 type BankTopic = { id: string; name: string; colorFrom: string; colorTo: string };
@@ -32,26 +32,67 @@ export function BankClient({
   const [topic, setTopic] = useState("");
   const [items, setItems] = useState<BankItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
+  const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
+  const activeController = useRef<AbortController | null>(null);
 
   // Hàm gọi API — ở client KHÔNG query DB trực tiếp được, phải đi qua API route.
-  const load = useCallback(async (keyword: string, topicId: string) => {
-    setLoading(true);
+  const load = useCallback(async (
+    keyword: string,
+    topicId: string,
+    offset: number,
+    append: boolean,
+    signal: AbortSignal
+  ) => {
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setItems([]);
+      setHasMore(false);
+      setLoadingMore(false);
+    }
+    setError("");
     try {
       const res = await fetch(
-        `/api/bank?q=${encodeURIComponent(keyword)}&topic=${encodeURIComponent(topicId)}`
+        `/api/bank?q=${encodeURIComponent(keyword)}&topic=${encodeURIComponent(topicId)}&offset=${offset}`,
+        { signal }
       );
-      if (res.ok) setItems(await res.json());
+      if (!res.ok) throw new Error("Không tải được ngân hàng câu hỏi.");
+      const result: { items: BankItem[]; hasMore: boolean } = await res.json();
+      setItems((current) => append ? [...current, ...result.items] : result.items);
+      setHasMore(result.hasMore);
+    } catch (caught) {
+      if (caught instanceof Error && caught.name === "AbortError") return;
+      setError("Không tải được câu hỏi. Kiểm tra kết nối rồi thử lại.");
     } finally {
-      setLoading(false);
+      if (!signal.aborted) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, []);
 
   // Debounce: chờ ngừng gõ 300ms mới gọi API — đỡ spam server.
   useEffect(() => {
-    const t = setTimeout(() => void load(q, topic), 300);
-    return () => clearTimeout(t);
+    const controller = new AbortController();
+    activeController.current = controller;
+    const t = setTimeout(() => {
+      void load(q, topic, 0, false, controller.signal);
+    }, 300);
+    return () => {
+      clearTimeout(t);
+      activeController.current?.abort();
+      activeController.current = null;
+    };
   }, [q, topic, load]);
+
+  const loadMore = useCallback(() => {
+    const controller = new AbortController();
+    activeController.current = controller;
+    void load(q, topic, items.length, true, controller.signal);
+  }, [items.length, load, q, topic]);
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-28 pb-24 sm:px-6">
@@ -103,13 +144,29 @@ export function BankClient({
       </div>
 
       {/* Kết quả */}
-      <p className="mt-8 text-xs font-bold tracking-wider text-slate-500 uppercase">
-        {loading ? "Đang tìm..." : `${items.length} câu hỏi`}
+      <p
+        role={loading ? "status" : undefined}
+        aria-live="polite"
+        className="mt-8 text-xs font-bold tracking-wider text-slate-500 uppercase"
+      >
+        {loading ? "Đang tìm..." : `${items.length} câu đã tải`}
         {loading && <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin" />}
       </p>
 
       <div className="mt-4 space-y-3">
-        {!loading && items.length === 0 && (
+        {error && (
+          <p role="alert" className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+            {error}
+          </p>
+        )}
+        {loading && items.length === 0 && (
+          <div role="status" aria-label="Đang tải câu hỏi" className="space-y-3">
+            {[0, 1, 2].map((item) => (
+              <div key={item} aria-hidden="true" className="glass h-24 animate-pulse rounded-2xl border border-white/5" />
+            ))}
+          </div>
+        )}
+        {!loading && !error && items.length === 0 && (
           <div className="glass rounded-2xl p-10 text-center text-sm text-slate-500">
             Không tìm thấy câu hỏi nào khớp từ khóa &quot;{q}&quot;. Thử từ khóa khác xem!
           </div>
@@ -173,6 +230,17 @@ export function BankClient({
             </div>
           );
         })}
+        {hasMore && (
+          <button
+            type="button"
+            onClick={loadMore}
+            disabled={loadingMore}
+            className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/5 disabled:cursor-wait disabled:opacity-60"
+          >
+            {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
+            {loadingMore ? "Đang tải thêm..." : "Tải thêm 50 câu"}
+          </button>
+        )}
       </div>
     </div>
   );

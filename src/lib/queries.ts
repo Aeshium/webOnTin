@@ -185,16 +185,18 @@ function mockExamCondition(userId?: number) {
 }
 
 export async function getSiteStats(userId?: number) {
-  const [q] = await db
-    .select({ n: sql<number>`cast(count(*) as int)` })
-    .from(questions);
-  const [a] = await db
-    .select({
-      n: sql<number>`cast(count(*) as int)`,
-      averagePercent: sql<number | null>`cast(round(avg(${attempts.correctCount} * 100.0 / nullif(${attempts.totalQuestions}, 0))) as int)`,
-    })
-    .from(attempts)
-    .where(mockExamCondition(userId));
+  const [[q], [a]] = await Promise.all([
+    db
+      .select({ n: sql<number>`cast(count(*) as int)` })
+      .from(questions),
+    db
+      .select({
+        n: sql<number>`cast(count(*) as int)`,
+        averagePercent: sql<number | null>`cast(round(avg(${attempts.correctCount} * 100.0 / nullif(${attempts.totalQuestions}, 0))) as int)`,
+      })
+      .from(attempts)
+      .where(mockExamCondition(userId)),
+  ]);
   return {
     questionCount: q?.n ?? 0,
     attemptCount: a?.n ?? 0,
@@ -788,12 +790,17 @@ export async function getAttemptDetail(id: number, userId?: number) {
 }
 
 /** Tra cứu ngân hàng câu hỏi — ilike giống LIKE '%...%' nhưng không phân biệt hoa thường. */
-export async function searchQuestionBank(q: string, topicId: string) {
+export async function searchQuestionBank(
+  q: string,
+  topicId: string,
+  offset = 0,
+  pageSize = 50
+) {
   const conds = [];
   if (topicId) conds.push(eq(questions.topicId, topicId));
   if (q) conds.push(ilike(questions.content, `%${q}%`));
 
-  return db
+  const rows = await db
     .select({
       id: questions.id,
       content: questions.content,
@@ -810,5 +817,11 @@ export async function searchQuestionBank(q: string, topicId: string) {
     .innerJoin(topics, eq(questions.topicId, topics.id))
     .where(conds.length ? and(...conds) : undefined)
     .orderBy(questions.topicId, questions.id)
-    .limit(200);
+    .limit(pageSize + 1)
+    .offset(offset);
+
+  return {
+    items: rows.slice(0, pageSize),
+    hasMore: rows.length > pageSize,
+  };
 }

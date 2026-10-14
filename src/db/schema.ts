@@ -24,6 +24,7 @@ import {
   boolean,
   timestamp,
   jsonb,
+  index,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 
@@ -139,49 +140,76 @@ export const topics = pgTable("topics", {
 });
 
 /** Bảng câu hỏi trắc nghiệm. */
-export const questions = pgTable("questions", {
-  id: serial("id").primaryKey(),
-  topicId: text("topic_id")
-    .notNull()
-    .references(() => topics.id, { onDelete: "cascade" }),
-  content: text("content").notNull(),
-  options: jsonb("options").$type<string[]>().notNull(), // ["A...", "B...", "C...", "D..."]
-  correctIndex: integer("correct_index").notNull(),
-  explanation: text("explanation").notNull(),
-  difficulty: text("difficulty").notNull().default("basic"),
-});
+export const questions = pgTable(
+  "questions",
+  {
+    id: serial("id").primaryKey(),
+    topicId: text("topic_id")
+      .notNull()
+      .references(() => topics.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    options: jsonb("options").$type<string[]>().notNull(), // ["A...", "B...", "C...", "D..."]
+    correctIndex: integer("correct_index").notNull(),
+    explanation: text("explanation").notNull(),
+    difficulty: text("difficulty").notNull().default("basic"),
+  },
+  (table) => [
+    index("questions_topic_difficulty_idx").on(
+      table.topicId,
+      table.difficulty
+    ),
+  ]
+);
 
 /** Bảng lượt làm bài (mỗi lần bấm "Nộp bài" = 1 dòng). topicId = null nghĩa là thi thử tổng hợp. */
-export const attempts = pgTable("attempts", {
-  id: serial("id").primaryKey(),
-  userId: integer("user_id").references(() => users.id, {
-    onDelete: "set null",
-  }),
-  topicId: text("topic_id").references(() => topics.id, {
-    onDelete: "set null",
-  }),
-  mode: text("mode").notNull().default("practice"), // "practice" | "exam"
-  examId: text("exam_id"),
-  totalQuestions: integer("total_questions").notNull(),
-  correctCount: integer("correct_count").notNull(),
-  timeTakenSec: integer("time_taken_sec").notNull().default(0),
-  createdAt: timestamp("created_at", { withTimezone: true })
-    .notNull()
-    .defaultNow(),
-});
+export const attempts = pgTable(
+  "attempts",
+  {
+    id: serial("id").primaryKey(),
+    userId: integer("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    topicId: text("topic_id").references(() => topics.id, {
+      onDelete: "set null",
+    }),
+    mode: text("mode").notNull().default("practice"), // "practice" | "exam"
+    examId: text("exam_id"),
+    totalQuestions: integer("total_questions").notNull(),
+    correctCount: integer("correct_count").notNull(),
+    timeTakenSec: integer("time_taken_sec").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("attempts_user_mode_created_idx").on(
+      table.userId,
+      table.mode,
+      table.createdAt
+    ),
+    index("attempts_mode_exam_idx").on(table.mode, table.examId),
+  ]
+);
 
 /** Bảng chi tiết từng câu trả lỡi của một lượt làm bài (để xem lại lịch sử). */
-export const attemptAnswers = pgTable("attempt_answers", {
-  id: serial("id").primaryKey(),
-  attemptId: integer("attempt_id")
-    .notNull()
-    .references(() => attempts.id, { onDelete: "cascade" }),
-  questionId: integer("question_id")
-    .notNull()
-    .references(() => questions.id, { onDelete: "cascade" }),
-  selectedIndex: integer("selected_index"), // null = bỏ trống
-  isCorrect: boolean("is_correct").notNull().default(false),
-});
+export const attemptAnswers = pgTable(
+  "attempt_answers",
+  {
+    id: serial("id").primaryKey(),
+    attemptId: integer("attempt_id")
+      .notNull()
+      .references(() => attempts.id, { onDelete: "cascade" }),
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    selectedIndex: integer("selected_index"), // null = bỏ trống
+    isCorrect: boolean("is_correct").notNull().default(false),
+  },
+  (table) => [
+    index("attempt_answers_attempt_idx").on(table.attemptId),
+    index("attempt_answers_question_idx").on(table.questionId),
+  ]
+);
 
 // Kiểu TypeScript suy ra tự động từ schema — khỏi viết interface tay.
 export type Topic = typeof topics.$inferSelect;
