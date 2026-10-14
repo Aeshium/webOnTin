@@ -9,6 +9,7 @@ import {
   getGuestPausedExamSnapshot,
   parseGuestPausedExam,
 } from "@/lib/guest-session";
+import { readQuizProgress } from "@/lib/quiz-progress";
 
 type ExamStat = { attemptCount: number; averagePercent: number | null };
 type ResumedSession = QuizResumeState & { examId: string | null };
@@ -48,6 +49,7 @@ export function MockExamCatalog({
   const [resumed, setResumed] = useState<ResumedSession | null>(null);
   const [resumeError, setResumeError] = useState("");
   const [resuming, setResuming] = useState(Boolean(resumeSessionId || resumeGuest));
+  const [checkingActiveExam, setCheckingActiveExam] = useState(true);
 
   useEffect(() => {
     if (resumeGuest) {
@@ -63,7 +65,20 @@ export function MockExamCatalog({
       }).finally(() => setResuming(false));
       return;
     }
-    if (!resumeSessionId) return;
+    if (!resumeSessionId) {
+      void Promise.resolve().then(() => {
+        const saved = readQuizProgress();
+        if (saved?.mode === "exam") {
+          setSelected(
+            saved.examId
+              ? MOCK_EXAMS.find((exam) => exam.id === saved.examId) ?? null
+              : null
+          );
+        }
+        setCheckingActiveExam(false);
+      });
+      return;
+    }
     void fetch(`/api/mock-exams/sessions/${encodeURIComponent(resumeSessionId)}/resume`, { method: "POST" })
       .then(async (response) => {
         const data = await response.json();
@@ -77,6 +92,14 @@ export function MockExamCatalog({
       .finally(() => setResuming(false));
   }, [resumeGuest, resumeSessionId]);
 
+  if (checkingActiveExam && !resumeGuest && !resumeSessionId) {
+    return (
+      <div role="status" className="mx-auto flex min-h-[55vh] max-w-4xl items-center justify-center gap-3 px-4 text-sm font-bold text-slate-300">
+        <Loader2 className="h-5 w-5 animate-spin" />
+        Đang kiểm tra bài thi đang làm...
+      </div>
+    );
+  }
   if (resuming) {
     return <div className="mx-auto flex min-h-[55vh] max-w-4xl items-center justify-center gap-3 px-4 text-sm font-bold text-slate-300"><Loader2 className="h-5 w-5 animate-spin" /> Đang khôi phục bài thi...</div>;
   }

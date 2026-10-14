@@ -37,6 +37,7 @@ export function BankClient({
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<number | null>(null);
   const activeController = useRef<AbortController | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
   // Hàm gọi API — ở client KHÔNG query DB trực tiếp được, phải đi qua API route.
   const load = useCallback(async (
@@ -89,10 +90,24 @@ export function BankClient({
   }, [q, topic, load]);
 
   const loadMore = useCallback(() => {
+    if (loading || loadingMore || !hasMore) return;
     const controller = new AbortController();
     activeController.current = controller;
     void load(q, topic, items.length, true, controller.signal);
-  }, [items.length, load, q, topic]);
+  }, [hasMore, items.length, load, loading, loadingMore, q, topic]);
+
+  useEffect(() => {
+    const sentinel = loadMoreRef.current;
+    if (!sentinel || !hasMore || loading || loadingMore || error) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) loadMore();
+      },
+      { rootMargin: "400px 0px" }
+    );
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [error, hasMore, loadMore, loading, loadingMore]);
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-28 pb-24 sm:px-6">
@@ -231,15 +246,22 @@ export function BankClient({
           );
         })}
         {hasMore && (
-          <button
-            type="button"
-            onClick={loadMore}
-            disabled={loadingMore}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/5 disabled:cursor-wait disabled:opacity-60"
-          >
-            {loadingMore && <Loader2 className="h-4 w-4 animate-spin" />}
-            {loadingMore ? "Đang tải thêm..." : "Tải thêm 50 câu"}
-          </button>
+          <div ref={loadMoreRef} className="py-3">
+            {loadingMore ? (
+              <p role="status" className="flex items-center justify-center gap-2 py-3 text-sm text-slate-400">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Đang tải thêm câu hỏi...
+              </p>
+            ) : (
+              <button
+                type="button"
+                onClick={loadMore}
+                className="flex w-full items-center justify-center rounded-xl border border-white/10 px-4 py-3 text-sm font-bold text-slate-200 transition hover:bg-white/5"
+              >
+                Tải thêm 50 câu
+              </button>
+            )}
+          </div>
         )}
       </div>
     </div>

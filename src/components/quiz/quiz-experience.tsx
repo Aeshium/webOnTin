@@ -42,6 +42,11 @@ import {
   saveGuestPausedExam,
 } from "@/lib/guest-session";
 import {
+  clearQuizProgress,
+  QUIZ_PROGRESS_KEY,
+  readQuizProgress,
+} from "@/lib/quiz-progress";
+import {
   ScoreRing,
   ResultReview,
   type ReviewItem,
@@ -130,11 +135,101 @@ export function QuizExperience({
   const [examSessionToken, setExamSessionToken] = useState<string | null>(resumeState?.token ?? null);
   const [pauseConfirmOpen, setPauseConfirmOpen] = useState(false);
   const [pausing, setPausing] = useState(false);
+  const [restoringProgress, setRestoringProgress] = useState(true);
 
   const submittingRef = useRef(false);
+  const restoredRef = useRef(false);
+  const elapsedRef = useRef(elapsed);
+  const configKey = JSON.stringify([
+    config.topicId,
+    config.topicName,
+    config.mode,
+    config.examId ?? null,
+  ]);
 
   const answeredCount = answers.filter((a) => a !== null).length;
   const markedCount = markedForReview.filter(Boolean).length;
+
+  useEffect(() => {
+    elapsedRef.current = elapsed;
+  }, [elapsed]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (resumeState) {
+        clearQuizProgress();
+        restoredRef.current = true;
+        setRestoringProgress(false);
+        return;
+      }
+
+      const saved = readQuizProgress();
+      if (saved?.configKey === configKey) {
+        const elapsedSinceSave =
+          saved.mode === "exam"
+            ? Math.floor((Date.now() - saved.savedAt) / 1000)
+            : 0;
+        setActiveMode(saved.mode);
+        setSelectedCount(saved.selectedCount);
+        setQuestions(saved.questions);
+        setAnswers(saved.answers);
+        setMarkedForReview(saved.markedForReview);
+        setCurrent(saved.currentIndex);
+        setElapsed(
+          Math.min(
+            config.examSeconds ?? 30 * 60,
+            saved.elapsedSec + elapsedSinceSave
+          )
+        );
+        setExamSessionToken(saved.examSessionToken);
+        setPhase("playing");
+      } else {
+        clearQuizProgress();
+      }
+      restoredRef.current = true;
+      setRestoringProgress(false);
+    }, 0);
+    return () => window.clearTimeout(timer);
+  }, [config.examSeconds, configKey, resumeState]);
+
+  useEffect(() => {
+    if (!restoredRef.current) return;
+    if (phase !== "playing" || questions.length === 0) {
+      clearQuizProgress();
+      return;
+    }
+    try {
+      sessionStorage.setItem(
+        QUIZ_PROGRESS_KEY,
+        JSON.stringify({
+          configKey,
+          examId: config.examId ?? null,
+          mode: activeMode,
+          selectedCount,
+          questions,
+          answers,
+          markedForReview,
+          currentIndex: current,
+          elapsedSec: elapsedRef.current,
+          examSessionToken,
+          savedAt: Date.now(),
+        })
+      );
+    } catch (caught) {
+      console.error("Không thể lưu tiến trình bài làm trong tab này:", caught);
+    }
+  }, [
+    activeMode,
+    answers,
+    config.examId,
+    configKey,
+    current,
+    examSessionToken,
+    markedForReview,
+    phase,
+    questions,
+    selectedCount,
+  ]);
 
   // ---------------- Đồng hồ ----------------
   useEffect(() => {
@@ -167,6 +262,7 @@ export function QuizExperience({
       });
       if (!res.ok) throw new Error("submit failed");
       const data: GradeResponse = await res.json();
+      clearQuizProgress();
       if (!examSessionToken && hasValidGuestSession()) clearGuestPausedExam();
       if (isExam && !examSessionToken && hasValidGuestSession()) {
         addGuestExamResult({
@@ -243,6 +339,7 @@ export function QuizExperience({
           currentIndex: current,
           elapsedSec: Math.min(elapsed, examSeconds),
         });
+        clearQuizProgress();
         window.location.assign("/lich-su");
         return;
       }
@@ -259,6 +356,7 @@ export function QuizExperience({
       });
       const data: { error?: string } = await response.json();
       if (!response.ok) throw new Error(data.error ?? "Không thể lưu tiến trình bài thi.");
+      clearQuizProgress();
       window.location.assign("/lich-su");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Không thể lưu tiến trình bài thi.");
@@ -317,6 +415,14 @@ export function QuizExperience({
   // MÀN HÌNH 1: CHỌN CẤU HÌNH
   // ==========================================================================
   if (phase === "setup") {
+    if (restoringProgress) {
+      return (
+        <div role="status" className="mx-auto flex min-h-[55vh] max-w-4xl items-center justify-center gap-3 px-4 text-sm font-bold text-slate-300">
+          <Loader2 className="h-5 w-5 animate-spin" />
+          Đang kiểm tra tiến trình bài làm...
+        </div>
+      );
+    }
     return (
       <div className="relative mx-auto max-w-2xl px-4 pt-28 pb-24 sm:px-6 lg:pt-36">
         <div className="pointer-events-none absolute top-10 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full blur-[110px]" style={{ background: `${config.colorFrom}26` }} />
