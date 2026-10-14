@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Clock3, Loader2, Play, Trophy } from "lucide-react";
+import { Clock3, Play, Trophy } from "lucide-react";
+import { CenteredLoading } from "@/components/centered-loading";
 import { QuizExperience, type QuizConfig, type QuizResumeState } from "@/components/quiz/quiz-experience";
 import { MOCK_EXAMS, type MockExamDefinition } from "@/lib/mock-exams";
 import {
@@ -93,15 +94,10 @@ export function MockExamCatalog({
   }, [resumeGuest, resumeSessionId]);
 
   if (checkingActiveExam && !resumeGuest && !resumeSessionId) {
-    return (
-      <div role="status" className="mx-auto flex min-h-[55vh] max-w-4xl items-center justify-center gap-3 px-4 text-sm font-bold text-slate-300">
-        <Loader2 className="h-5 w-5 animate-spin" />
-        Đang kiểm tra bài thi đang làm...
-      </div>
-    );
+    return <CenteredLoading />;
   }
   if (resuming) {
-    return <div className="mx-auto flex min-h-[55vh] max-w-4xl items-center justify-center gap-3 px-4 text-sm font-bold text-slate-300"><Loader2 className="h-5 w-5 animate-spin" /> Đang khôi phục bài thi...</div>;
+    return <CenteredLoading />;
   }
   if (resumed && selected !== undefined) {
     return <QuizExperience config={examConfig(selected, totalAvailable)} resumeState={resumed} />;

@@ -2,7 +2,7 @@
 
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
-import { LoaderCircle } from "lucide-react";
+import { CenteredLoading } from "@/components/centered-loading";
 import { hasValidGuestSession, safeNextPath } from "@/lib/guest-session";
 
 const AUTH_PATHS = new Set([
@@ -79,18 +79,7 @@ export function SiteAccessGate({ children }: { children: ReactNode }) {
   }, [isAuthPage, pathname, router]);
 
   if (!allowed) {
-    return (
-      <div
-        role="status"
-        aria-live="polite"
-        className="grid min-h-[70vh] place-items-center px-4 text-sm text-slate-400"
-      >
-        <span className="inline-flex items-center gap-3">
-          <LoaderCircle className="h-5 w-5 animate-spin text-cyan-300" />
-          Đang kiểm tra phiên truy cập…
-        </span>
-      </div>
-    );
+    return <CenteredLoading />;
   }
   return <>{children}</>;
 }

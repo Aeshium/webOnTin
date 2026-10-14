@@ -35,6 +35,7 @@ import {
   LogOut,
 } from "lucide-react";
 import type { PublicQuestion } from "@/lib/queries";
+import { CenteredLoading } from "@/components/centered-loading";
 import {
   addGuestExamResult,
   clearGuestPausedExam,
@@ -416,12 +417,7 @@ export function QuizExperience({
   // ==========================================================================
   if (phase === "setup") {
     if (restoringProgress) {
-      return (
-        <div role="status" className="mx-auto flex min-h-[55vh] max-w-4xl items-center justify-center gap-3 px-4 text-sm font-bold text-slate-300">
-          <Loader2 className="h-5 w-5 animate-spin" />
-          Đang kiểm tra tiến trình bài làm...
-        </div>
-      );
+      return <CenteredLoading />;
     }
     return (
       <div className="relative mx-auto max-w-2xl px-4 pt-28 pb-24 sm:px-6 lg:pt-36">
