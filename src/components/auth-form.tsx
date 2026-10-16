@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
 import {
+  ArrowRight,
   Atom,
   BookOpenCheck,
   BrainCircuit,
@@ -247,12 +248,10 @@ export function AuthForm({
                 startGuestSession();
                 window.location.assign(safeNextPath(nextPath));
               }}
-              className="w-full rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-2.5 text-left transition hover:bg-cyan-300/15"
+              className="group relative flex w-full items-center justify-center rounded-xl border border-cyan-300/40 bg-cyan-300/10 px-4 py-3 text-center text-sm font-bold text-cyan-100 transition duration-200 hover:border-cyan-200/80 hover:bg-cyan-300/20 hover:shadow-lg hover:shadow-cyan-400/10 active:scale-[0.98]"
             >
-              <span className="block text-sm font-bold text-cyan-100">Vào với tư cách Guest</span>
-              <span className="mt-1 block text-xs font-medium text-cyan-100/60">
-                Điểm chỉ lưu trong tab này, không lên bảng xếp hạng.
-              </span>
+              <span>Vào với tư cách Guest</span>
+              <ArrowRight className="absolute right-4 h-4 w-4 transition-transform group-hover:translate-x-1" />
             </button>
             <button
               type="button"

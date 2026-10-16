@@ -9,6 +9,7 @@ import {
   ClipboardList,
   Eye,
   Loader2,
+  Trash2,
   X,
   Timer,
   Play,
@@ -28,6 +29,11 @@ import {
   ScoreRing,
   type ReviewItem,
 } from "@/components/quiz/result-review";
+import {
+  getAttemptHistoryHiddenBefore,
+  hideExistingAttemptHistory,
+  subscribeAttemptHistoryVisibility,
+} from "@/lib/attempt-history-visibility";
 
 type AttemptDetail = {
   id: number;
@@ -61,12 +67,19 @@ function formatTime(sec: number) {
 export function HistoryClient({
   attempts,
   isGuest = false,
+  userId,
 }: {
   attempts: AttemptSummary[];
   isGuest?: boolean;
+  userId: number | null;
 }) {
   const [detail, setDetail] = useState<AttemptDetail | null>(null);
   const [loadingId, setLoadingId] = useState<number | null>(null);
+  const hiddenBefore = useSyncExternalStore(
+    subscribeAttemptHistoryVisibility,
+    () => (userId === null ? 0 : getAttemptHistoryHiddenBefore(userId)),
+    () => 0
+  );
   const [pausedExams, setPausedExams] = useState<PausedExamSummary[]>([]);
   const [pausedLoadError, setPausedLoadError] = useState("");
   const guestResultsValue = useSyncExternalStore(
@@ -94,6 +107,20 @@ export function HistoryClient({
       });
   }, [isGuest]);
 
+  const visibleAttempts = attempts.filter(
+    (attempt) => Date.parse(attempt.createdAt) > hiddenBefore
+  );
+
+  function clearHistory() {
+    if (userId === null) return;
+    const confirmed = window.confirm(
+      "Ẩn toàn bộ lịch sử làm bài trên trình duyệt này? Dữ liệu trong database vẫn được giữ nguyên."
+    );
+    if (confirmed) {
+      hideExistingAttemptHistory(userId);
+    }
+  }
+
   async function openDetail(id: number) {
     setLoadingId(id);
     try {
@@ -112,6 +139,16 @@ export function HistoryClient({
       <h1 className="mt-3 text-3xl font-black tracking-tight text-white sm:text-4xl">
         Lịch sử ôn luyện
       </h1>
+      {userId !== null && (
+        <button
+          type="button"
+          onClick={clearHistory}
+          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-rose-400/25 bg-rose-400/10 px-4 py-2.5 text-sm font-bold text-rose-200 transition hover:border-rose-300/50 hover:bg-rose-400/15 active:scale-[0.98]"
+        >
+          <Trash2 className="h-4 w-4" />
+          Xóa sạch lịch sử
+        </button>
+      )}
       <p className="mt-3 text-sm text-slate-500">
         {isGuest
           ? "Kết quả và bài thi tạm dừng của Guest chỉ được giữ trong tab này, tự xóa khi đóng tab hoặc sang ngày mới."
@@ -119,7 +156,7 @@ export function HistoryClient({
       </p>
       {pausedLoadError && <p role="alert" className="mt-4 rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{pausedLoadError}</p>}
 
-      {attempts.length === 0 && guestResults.length === 0 && pausedExams.length === 0 && !guestPausedExam ? (
+      {visibleAttempts.length === 0 && guestResults.length === 0 && pausedExams.length === 0 && !guestPausedExam ? (
         <div className="glass mt-10 rounded-3xl p-12 text-center">
           <span className="mx-auto grid h-14 w-14 place-items-center rounded-2xl bg-white/5 text-slate-500">
             <ClipboardList className="h-7 w-7" />
@@ -183,7 +220,7 @@ export function HistoryClient({
                 createdAt: item.completedAt,
                 isGuestResult: true as const,
               }))
-            : attempts.map((item) => ({ ...item, isGuestResult: false as const }))
+            : visibleAttempts.map((item) => ({ ...item, isGuestResult: false as const }))
           ).map((a, i) => {
             const percent = Math.round((a.correctCount / a.totalQuestions) * 100);
             const c1 = a.topicColorFrom ?? "#22d3ee";

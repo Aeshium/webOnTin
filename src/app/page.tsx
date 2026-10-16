@@ -4,6 +4,7 @@ import {
   getSiteStats,
   getTopicPerformance,
   listAttempts,
+  listPausedMockExams,
 } from "@/lib/queries";
 import { getCurrentUser } from "@/lib/auth";
 
@@ -17,16 +18,19 @@ export const metadata: Metadata = {
 
 export default async function HomePage() {
   const user = await getCurrentUser();
-  const [topics, stats, recentAttempts] = await Promise.all([
+  const [topics, stats, recentAttempts, pausedExams] = await Promise.all([
     getTopicPerformance(user?.id),
     getSiteStats(user?.id),
-    listAttempts(5, user?.id),
+    listAttempts(4, user?.id),
+    user ? listPausedMockExams(user.id) : Promise.resolve([]),
   ]);
 
   return (
     <Dashboard
       topics={topics}
       recentAttempts={recentAttempts}
+      pausedExams={pausedExams}
+      userId={user?.id ?? null}
       stats={stats}
       userName={user?.name ?? null}
     />

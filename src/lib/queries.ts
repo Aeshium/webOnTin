@@ -719,9 +719,9 @@ export async function getUserAchievements(userId: number) {
   };
 }
 
-/** Lịch sử làm bài (mới nhất trước) — LEFT JOIN sang bảng topics để lấy tên. */
-export async function listAttempts(limit = 30, userId?: number): Promise<AttemptSummary[]> {
-  const rows = await db
+/** Truy vấn lịch sử làm bài theo thứ tự mới nhất trước. */
+function attemptListQuery(userId?: number) {
+  return db
     .select({
       id: attempts.id,
       topicId: attempts.topicId,
@@ -738,10 +738,25 @@ export async function listAttempts(limit = 30, userId?: number): Promise<Attempt
     .from(attempts)
     .leftJoin(topics, eq(attempts.topicId, topics.id))
     .where(mockExamCondition(userId))
-    .orderBy(desc(attempts.createdAt))
-    .limit(limit);
+    .orderBy(desc(attempts.createdAt));
+}
 
+type AttemptRow = Awaited<ReturnType<typeof attemptListQuery>>[number];
+
+function serializeAttemptRows(rows: AttemptRow[]): AttemptSummary[] {
   return rows.map((r) => ({ ...r, createdAt: r.createdAt.toISOString() }));
+}
+
+/** Lượt làm gần đây cho các phần tóm tắt có giới hạn. */
+export async function listAttempts(limit = 30, userId?: number): Promise<AttemptSummary[]> {
+  const rows = await attemptListQuery(userId).limit(limit);
+  return serializeAttemptRows(rows);
+}
+
+/** Toàn bộ lịch sử làm bài (mới nhất trước) cho trang lịch sử. */
+export async function listAllAttempts(userId?: number): Promise<AttemptSummary[]> {
+  const rows = await attemptListQuery(userId);
+  return serializeAttemptRows(rows);
 }
 
 /** Chi tiết một lượt làm bài (để xem lại từng câu đã trả lờat). */
