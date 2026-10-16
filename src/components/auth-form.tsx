@@ -173,12 +173,12 @@ export function AuthForm({
           <div className="pointer-events-none absolute -top-28 left-1/3 h-80 w-80 rounded-full bg-cyan-400/10 blur-[100px]" />
           <div className="pointer-events-none absolute right-[-5rem] bottom-[-6rem] h-96 w-96 rounded-full bg-violet-500/15 blur-[120px]" />
 
-          <Link href="/" className="relative z-10 inline-flex w-fit items-center gap-3">
+          <div className="relative z-10 inline-flex w-fit items-center gap-3">
             <span className="grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br from-cyan-300 via-violet-400 to-pink-400 text-ink-950 shadow-lg shadow-violet-500/20">
               <GraduationCap className="h-6 w-6" strokeWidth={2.5} />
             </span>
             <span className="text-2xl font-black tracking-tight text-white">Ôn<span className="text-gradient">Tin</span></span>
-          </Link>
+          </div>
 
           <div className="relative z-10 my-8 max-w-2xl lg:my-0 lg:py-14">
             <span className="inline-flex items-center gap-2 rounded-full border border-cyan-300/20 bg-cyan-300/8 px-3.5 py-2 text-xs font-bold tracking-wide text-cyan-100">
