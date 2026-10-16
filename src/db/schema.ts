@@ -26,7 +26,14 @@ import {
   jsonb,
   index,
   uniqueIndex,
+  uuid,
+  check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+
+export type UserRole = "student" | "teacher" | "admin";
+export type FeedbackType = "bug" | "feature" | "other";
+export type FeedbackStatus = "pending" | "resolved";
 
 export const users = pgTable("users", {
   id: serial("id").primaryKey(),
@@ -35,6 +42,8 @@ export const users = pgTable("users", {
   className: text("class_name"),
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
+  role: text("role").$type<UserRole>().notNull().default("student"),
+  isActive: boolean("is_active").notNull().default(true),
   background: text("background").notNull().default("aurora"),
   avatarUrl: text("avatar_url"),
   examDate: timestamp("exam_date", { withTimezone: true }),
@@ -47,7 +56,117 @@ export const users = pgTable("users", {
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
+}, (table) => [
+  check("users_role_check", sql`${table.role} in ('student', 'teacher', 'admin')`),
+]);
+
+export const feedbacks = pgTable(
+  "feedbacks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: integer("user_id").references(() => users.id, {
+      onDelete: "set null",
+    }),
+    type: text("type").$type<FeedbackType>().notNull(),
+    content: text("content").notNull(),
+    status: text("status").$type<FeedbackStatus>().notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("feedbacks_status_created_idx").on(table.status, table.createdAt),
+    check("feedbacks_type_check", sql`${table.type} in ('bug', 'feature', 'other')`),
+    check("feedbacks_status_check", sql`${table.status} in ('pending', 'resolved')`),
+  ]
+);
+
+export const courses = pgTable("courses", {
+  id: serial("id").primaryKey(),
+  teacherId: integer("teacher_id")
+    .notNull()
+    .references(() => users.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
 });
+
+export const courseEnrollments = pgTable(
+  "course_enrollments",
+  {
+    id: serial("id").primaryKey(),
+    courseId: integer("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    enrolledAt: timestamp("enrolled_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("course_enrollments_course_user_idx").on(table.courseId, table.userId),
+    index("course_enrollments_user_idx").on(table.userId),
+  ]
+);
+
+export const lessons = pgTable(
+  "lessons",
+  {
+    id: serial("id").primaryKey(),
+    courseId: integer("course_id")
+      .notNull()
+      .references(() => courses.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    content: text("content").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [index("lessons_course_order_idx").on(table.courseId, table.sortOrder)]
+);
+
+export const assignments = pgTable("assignments", {
+  id: serial("id").primaryKey(),
+  courseId: integer("course_id")
+    .notNull()
+    .references(() => courses.id, { onDelete: "cascade" }),
+  title: text("title").notNull(),
+  description: text("description").notNull().default(""),
+  dueAt: timestamp("due_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+export const assignmentSubmissions = pgTable(
+  "assignment_submissions",
+  {
+    id: serial("id").primaryKey(),
+    assignmentId: integer("assignment_id")
+      .notNull()
+      .references(() => assignments.id, { onDelete: "cascade" }),
+    userId: integer("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    score: integer("score"),
+    feedback: text("feedback"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    gradedAt: timestamp("graded_at", { withTimezone: true }),
+  },
+  (table) => [
+    index("assignment_submissions_assignment_idx").on(table.assignmentId),
+    index("assignment_submissions_user_idx").on(table.userId),
+    uniqueIndex("assignment_submissions_assignment_user_idx").on(table.assignmentId, table.userId),
+  ]
+);
 
 export const sessions = pgTable("sessions", {
   id: serial("id").primaryKey(),

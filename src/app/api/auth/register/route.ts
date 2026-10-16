@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { createSession, hashPassword, setSessionCookie } from "@/lib/auth";
 import { validatePassword } from "@/lib/password-policy";
+import { roleSafeNextPath } from "@/lib/role-access";
 
 export async function POST(request: NextRequest) {
   let body: {
@@ -11,6 +12,7 @@ export async function POST(request: NextRequest) {
     email?: unknown;
     password?: unknown;
     confirmPassword?: unknown;
+    next?: unknown;
   };
   try {
     body = await request.json();
@@ -49,9 +51,12 @@ export async function POST(request: NextRequest) {
     const [user] = await db
       .insert(users)
       .values({ name, email, passwordHash: await hashPassword(password) })
-      .returning({ id: users.id, name: users.name, email: users.email });
+      .returning({ id: users.id, name: users.name, email: users.email, role: users.role });
     const token = await createSession(user.id);
-    const response = NextResponse.json({ user });
+    const response = NextResponse.json({
+      user,
+      next: roleSafeNextPath("student", typeof body.next === "string" ? body.next : null),
+    });
     setSessionCookie(response, token);
     return response;
   } catch (error) {

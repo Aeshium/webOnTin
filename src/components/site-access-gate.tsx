@@ -4,6 +4,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { CenteredLoading } from "@/components/centered-loading";
 import { hasValidGuestSession, safeNextPath } from "@/lib/guest-session";
+import { roleHomePath } from "@/lib/role-access";
 
 const AUTH_PATHS = new Set([
   "/dang-nhap",
@@ -26,12 +27,15 @@ export function SiteAccessGate({ children }: { children: ReactNode }) {
       setAllowed(false);
       try {
         const response = await fetch("/api/auth/session");
-        const { user } = await response.json();
+        const { user }: { user?: { role?: "student" | "teacher" | "admin" } | null } = await response.json();
         if (!active) return;
         if (user) {
           if (isAuthPage) {
-            const next = new URLSearchParams(window.location.search).get("next");
-            router.replace(safeNextPath(next));
+            router.replace(
+              user.role === "teacher" || user.role === "admin"
+                ? roleHomePath(user.role)
+                : safeNextPath(new URLSearchParams(window.location.search).get("next"))
+            );
           } else {
             setAllowed(true);
           }

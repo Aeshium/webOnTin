@@ -10,6 +10,8 @@ import { SiteAccessGate } from "@/components/site-access-gate";
 export function SiteChrome({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const isSignInPage = pathname === "/dang-nhap";
+  const isPortalPage = pathname === "/admin" || pathname.startsWith("/admin/") ||
+    pathname === "/teacher" || pathname.startsWith("/teacher/");
 
   useEffect(() => {
     let observer: MutationObserver | null = null;
@@ -75,11 +77,11 @@ export function SiteChrome({ children }: { children: ReactNode }) {
 
   return (
     <>
-      {!isSignInPage && <SiteNavbar />}
+      {!isSignInPage && !isPortalPage && <SiteNavbar />}
       <SiteAccessGate>
         {children}
       </SiteAccessGate>
-      {!isSignInPage && <SiteFooter />}
+      {!isSignInPage && !isPortalPage && <SiteFooter />}
     </>
   );
 }

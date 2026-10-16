@@ -23,6 +23,8 @@ export function setSessionCookie(response: NextResponse, token: string) {
 export type PublicUser = Pick<
   typeof users.$inferSelect,
   | "id"
+  | "role"
+  | "isActive"
   | "name"
   | "schoolName"
   | "className"
@@ -74,6 +76,8 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
   const [session] = await db
     .select({
       id: users.id,
+      role: users.role,
+      isActive: users.isActive,
       name: users.name,
       schoolName: users.schoolName,
       className: users.className,
@@ -94,7 +98,8 @@ export async function getCurrentUser(): Promise<PublicUser | null> {
     .where(
       and(
         eq(sessions.tokenHash, hashToken(token)),
-        gt(sessions.expiresAt, new Date())
+        gt(sessions.expiresAt, new Date()),
+        eq(users.isActive, true)
       )
     )
     .limit(1);

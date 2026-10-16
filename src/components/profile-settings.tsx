@@ -6,6 +6,7 @@ import { Eye, EyeOff } from "lucide-react";
 import type { PublicUser } from "@/lib/auth";
 import { ACHIEVEMENTS } from "@/lib/achievements";
 import { validatePassword } from "@/lib/password-policy";
+import { FeedbackModal } from "@/components/feedback-modal";
 
 const PRESETS = [
   { id: "aurora", name: "Cực quang", style: "from-cyan-500/60 via-violet-500/50 to-pink-500/40" },
@@ -320,6 +321,11 @@ export function ProfileSettings({
           {passwordBusy ? "Đang cập nhật..." : "Cập nhật mật khẩu"}
         </button>
       </form>
+      <div className="mt-6 rounded-3xl border border-white/10 bg-ink-900/70 p-6 sm:p-8">
+        <h2 className="text-xl font-black text-white">Góp ý cho ÔnTin</h2>
+        <p className="mt-1 text-sm text-slate-400">Gửi báo lỗi hoặc đề xuất để giúp chúng tôi cải thiện hệ thống.</p>
+        <FeedbackModal />
+      </div>
       <Link href="/thong-bao" className="mt-5 inline-block text-sm font-semibold text-cyan-200 hover:text-white">Xem thông báo tài khoản →</Link>
     </main>
   );

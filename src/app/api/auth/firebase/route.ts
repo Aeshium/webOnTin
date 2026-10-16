@@ -4,16 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { userAchievements, users } from "@/db/schema";
 import { createSession, hashPassword, setSessionCookie } from "@/lib/auth";
-
-function safeNextPath(value: string | null) {
-  return value &&
-    value.startsWith("/") &&
-    !value.startsWith("//") &&
-    !value.includes("\\") &&
-    !/[\r\n]/.test(value)
-    ? value
-    : "/";
-}
+import { roleSafeNextPath } from "@/lib/role-access";
 
 export async function POST(request: NextRequest) {
   let body: { idToken?: unknown; next?: unknown };
@@ -83,6 +74,9 @@ export async function POST(request: NextRequest) {
       if (!created) throw new Error("Không tạo được tài khoản Firebase.");
       user = created;
     } else {
+      if (!user.isActive) {
+        return NextResponse.json({ error: "Tài khoản này hiện đã bị khóa." }, { status: 403 });
+      }
       const dayNumber = (date: Date) =>
         Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()) / 86_400_000;
       const dayGap = dayNumber(now) - dayNumber(user.lastLoginAt);
@@ -110,7 +104,10 @@ export async function POST(request: NextRequest) {
     }
 
     const sessionToken = await createSession(user.id);
-    const response = NextResponse.json({ ok: true, next: safeNextPath(typeof body.next === "string" ? body.next : null) });
+    const response = NextResponse.json({
+      ok: true,
+      next: roleSafeNextPath(user.role, typeof body.next === "string" ? body.next : null),
+    });
     setSessionCookie(response, sessionToken);
     return response;
   } catch (error) {

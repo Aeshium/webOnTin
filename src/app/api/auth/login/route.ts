@@ -3,9 +3,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { userAchievements, users } from "@/db/schema";
 import { createSession, setSessionCookie, verifyPassword } from "@/lib/auth";
+import { roleSafeNextPath } from "@/lib/role-access";
 
 export async function POST(request: NextRequest) {
-  let body: { email?: unknown; password?: unknown };
+  let body: { email?: unknown; password?: unknown; next?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -21,6 +22,9 @@ export async function POST(request: NextRequest) {
   const [user] = await db.select().from(users).where(eq(users.email, email)).limit(1);
   if (!user || !(await verifyPassword(password, user.passwordHash))) {
     return NextResponse.json({ error: "Email hoặc mật khẩu không chính xác." }, { status: 401 });
+  }
+  if (!user.isActive) {
+    return NextResponse.json({ error: "Tài khoản này hiện đã bị khóa." }, { status: 403 });
   }
 
   try {
@@ -56,6 +60,7 @@ export async function POST(request: NextRequest) {
     const token = await createSession(user.id);
     const response = NextResponse.json({
       user: { id: user.id, name: user.name, email: user.email },
+      next: roleSafeNextPath(user.role, typeof body.next === "string" ? body.next : null),
     });
     setSessionCookie(response, token);
     return response;

@@ -127,6 +127,12 @@ export function Dashboard({
                 <Play className="h-4 w-4" fill="currentColor" />
                 Làm đề thi thử
               </Link>
+              <Link
+                href="/bai-tap"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
+              >
+                Bài tập
+              </Link>
             </div>
           </div>
 

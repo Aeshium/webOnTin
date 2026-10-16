@@ -79,7 +79,7 @@ export function AuthForm({
           next: safeNextPath(nextPath),
         }),
       });
-      const result: { next?: string; error?: string } = await response.json();
+      const result: { next?: string; error?: string; message?: string } = await response.json();
       if (!response.ok) {
         throw new Error(result.error ?? "Không thể đăng nhập bằng Google.");
       }
@@ -140,18 +140,21 @@ export function AuthForm({
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...data, token }),
+        body: JSON.stringify({ ...data, token, next: safeNextPath(nextPath) }),
       });
-      const result = await response.json();
+      const result: { next?: string; error?: string; message?: string } = await response.json();
       if (!response.ok) {
         setError(result.error ?? "Không thể thực hiện yêu cầu.");
         return;
       }
       if (mode === "login" || mode === "register") {
+        if (typeof result.next !== "string") {
+          throw new Error("Máy chủ không trả về địa chỉ chuyển trang hợp lệ.");
+        }
         clearGuestSession();
-        window.location.assign(safeNextPath(nextPath));
+        window.location.assign(result.next);
       } else if (mode === "forgot") {
-        setNotice(result.message);
+        setNotice(result.message ?? "Nếu email thuộc tài khoản, hướng dẫn đặt lại mật khẩu sẽ được gửi.");
       } else {
         setNotice("Mật khẩu đã được cập nhật. Bạn có thể đăng nhập.");
         router.push("/dang-nhap");
