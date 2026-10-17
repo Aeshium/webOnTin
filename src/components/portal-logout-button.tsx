@@ -2,7 +2,13 @@
 
 import { useState } from "react";
 
-export function PortalLogoutButton({ compact = false }: { compact?: boolean }) {
+export function PortalLogoutButton({
+  compact = false,
+  label = "Đăng xuất",
+}: {
+  compact?: boolean;
+  label?: string;
+}) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
@@ -29,7 +35,7 @@ export function PortalLogoutButton({ compact = false }: { compact?: boolean }) {
         disabled={busy}
         className={`${compact ? "rounded-lg border border-white/10 px-3 py-2 text-xs" : "text-xs"} font-bold text-slate-400 transition hover:text-white disabled:opacity-50`}
       >
-        {busy ? "Đang đăng xuất..." : "Đăng xuất"}
+        {busy ? "Đang đăng xuất..." : label}
       </button>
       {error && <p role="alert" className="mt-2 max-w-52 text-xs text-rose-300">{error}</p>}
     </div>

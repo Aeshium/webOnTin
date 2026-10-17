@@ -27,8 +27,6 @@ export function PortalShell({
 }) {
   const isAdminPortal = type === "admin";
   const isAdminUser = role === "admin";
-  const adminReturnHref = isAdminPortal ? "/dang-nhap" : "/admin";
-  const adminReturnLabel = isAdminPortal ? "Về Đăng Nhập" : "Về không gian quản lý";
   return (
     <div className="min-h-svh bg-slate-900 text-slate-100">
     <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 border-r border-slate-600/50 bg-gradient-to-b from-slate-800 to-slate-900 px-5 py-7 shadow-2xl lg:block">
@@ -50,9 +48,9 @@ export function PortalShell({
         ))}
       </nav>
       {isAdminUser ? (
-        <Link href={adminReturnHref} className="absolute bottom-7 left-8 text-xs font-bold text-slate-500 hover:text-white">
-          ← {adminReturnLabel}
-        </Link>
+        isAdminPortal
+          ? <div className="absolute bottom-7 left-8"><PortalLogoutButton label="← Về Đăng Nhập" /></div>
+          : <Link href="/admin" className="absolute bottom-7 left-8 text-xs font-bold text-slate-500 hover:text-white">← Về không gian quản lý</Link>
       ) : (
         <div className="absolute bottom-7 left-8">
           <PortalLogoutButton />
@@ -69,7 +67,9 @@ export function PortalShell({
             <Link key={href} href={href} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">{label}</Link>
           ))}
           {isAdminUser
-            ? <Link href={adminReturnHref} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">{adminReturnLabel}</Link>
+            ? isAdminPortal
+              ? <PortalLogoutButton compact label="Về Đăng Nhập" />
+              : <Link href="/admin" className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold text-slate-300">Về không gian quản lý</Link>
             : <PortalLogoutButton compact />}
         </div>
       </header>

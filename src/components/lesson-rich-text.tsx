@@ -135,14 +135,38 @@ export function LessonRichTextEditor({
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => run(() => editor.chain().focus().wrapIn("lessonCallout").run())} className="h-8 rounded-md px-2 text-xs font-bold text-amber-100 hover:bg-amber-300/10">Ghi nhớ</button>
       </div>
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
-        <form onSubmit={(event) => { event.preventDefault(); applyLink(); }} className="flex min-w-56 flex-1 gap-1">
-          <input value={linkInput} onChange={(event) => setLinkInput(event.target.value)} aria-label="Địa chỉ liên kết" placeholder="https://... · Chọn chữ rồi gắn liên kết" className="h-8 min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-2 text-xs text-white" />
-          <button type="submit" className="rounded-md border border-white/10 px-2 text-xs text-slate-200">Gắn link</button>
-        </form>
-        <form onSubmit={(event) => { event.preventDefault(); addImage(); }} className="flex min-w-56 flex-1 gap-1">
-          <input value={imageInput} onChange={(event) => setImageInput(event.target.value)} aria-label="Địa chỉ ảnh minh họa" placeholder="URL ảnh https://... hoặc /..." className="h-8 min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-2 text-xs text-white" />
-          <button type="submit" className="rounded-md border border-white/10 px-2 text-xs text-slate-200">Chèn ảnh</button>
-        </form>
+        <div className="flex min-w-56 flex-1 gap-1">
+          <input
+            value={linkInput}
+            onChange={(event) => setLinkInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                applyLink();
+              }
+            }}
+            aria-label="Địa chỉ liên kết"
+            placeholder="https://... · Chọn chữ rồi gắn liên kết"
+            className="h-8 min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-2 text-xs text-white"
+          />
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={applyLink} className="rounded-md border border-white/10 px-2 text-xs text-slate-200">Gắn link</button>
+        </div>
+        <div className="flex min-w-56 flex-1 gap-1">
+          <input
+            value={imageInput}
+            onChange={(event) => setImageInput(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                addImage();
+              }
+            }}
+            aria-label="Địa chỉ ảnh minh họa"
+            placeholder="URL ảnh https://... hoặc /..."
+            className="h-8 min-w-0 flex-1 rounded-md border border-white/10 bg-black/20 px-2 text-xs text-white"
+          />
+          <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={addImage} className="rounded-md border border-white/10 px-2 text-xs text-slate-200">Chèn ảnh</button>
+        </div>
       </div>
       {availableQuestions.length > 0 && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
