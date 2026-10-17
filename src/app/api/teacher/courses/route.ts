@@ -14,6 +14,7 @@ import {
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 import { getLessonQuestionIds, hasNestedLessonQuestionBlocks } from "@/lib/lesson-content";
+import { ASSIGNMENT_QUESTION_TYPES } from "@/lib/assignment-questions";
 
 export const dynamic = "force-dynamic";
 
@@ -36,8 +37,11 @@ async function ownsCourse(user: NonNullable<Awaited<ReturnType<typeof authorized
 
 type CustomQuestionInput = {
   content: string;
-  options: [string, string, string, string];
-  correctIndex: number;
+  questionType: (typeof ASSIGNMENT_QUESTION_TYPES)[number];
+  options: string[];
+  correctAnswers: number[];
+  acceptedAnswers: string[];
+  difficulty: "basic" | "advanced";
   explanation: string;
 };
 
@@ -59,16 +63,36 @@ function parseCustomQuestions(value: unknown): CustomQuestionInput[] | null {
   for (const item of value) {
     if (!item || typeof item !== "object") return null;
     const question = item as Record<string, unknown>;
-    const { content, options, correctIndex, explanation } = question;
+    const {
+      content,
+      questionType = "single_choice",
+      options,
+      correctAnswers,
+      acceptedAnswers = [],
+      difficulty = "basic",
+      explanation,
+      correctIndex,
+    } = question;
+    const type = ASSIGNMENT_QUESTION_TYPES.includes(questionType as (typeof ASSIGNMENT_QUESTION_TYPES)[number])
+      ? questionType as CustomQuestionInput["questionType"]
+      : correctIndex !== undefined
+        ? "single_choice"
+        : null;
+    const resolvedCorrectAnswers = Array.isArray(correctAnswers)
+      ? correctAnswers
+      : Number.isInteger(correctIndex)
+        ? [correctIndex]
+        : [];
     if (
       typeof content !== "string" ||
       content.trim().length < 3 ||
       content.length > 2000 ||
       !Array.isArray(options) ||
-      options.length !== 4 ||
-      !Number.isInteger(correctIndex) ||
-      (correctIndex as number) < 0 ||
-      (correctIndex as number) > 3 ||
+      !type ||
+      !Array.isArray(acceptedAnswers) ||
+      !["basic", "advanced"].includes(difficulty as string) ||
+      !resolvedCorrectAnswers.every((index) => Number.isInteger(index) && index >= 0 && index < options.length) ||
+      new Set(resolvedCorrectAnswers).size !== resolvedCorrectAnswers.length ||
       typeof explanation !== "string" ||
       explanation.length > 2000
     ) return null;
@@ -77,10 +101,24 @@ function parseCustomQuestions(value: unknown): CustomQuestionInput[] | null {
       if (typeof option !== "string" || option.trim().length === 0 || option.length > 500) return null;
       normalizedOptions.push(option.trim());
     }
+    const validByType =
+      type === "single_choice"
+        ? normalizedOptions.length === 4 && resolvedCorrectAnswers.length === 1 && acceptedAnswers.length === 0
+        : type === "multiple_choice"
+          ? normalizedOptions.length === 4 && resolvedCorrectAnswers.length >= 2 && acceptedAnswers.length === 0
+          : type === "true_false"
+            ? normalizedOptions.length === 2 && normalizedOptions[0] === "Đúng" && normalizedOptions[1] === "Sai" && resolvedCorrectAnswers.length === 1 && acceptedAnswers.length === 0
+            : normalizedOptions.length === 0 && acceptedAnswers.length >= 1 && acceptedAnswers.length <= 20 &&
+              acceptedAnswers.every((answer) => typeof answer === "string" && answer.trim().length > 0 && answer.length <= 200) &&
+              resolvedCorrectAnswers.length === 0;
+    if (!validByType) return null;
     parsed.push({
       content: content.trim(),
-      options: [normalizedOptions[0], normalizedOptions[1], normalizedOptions[2], normalizedOptions[3]],
-      correctIndex: correctIndex as number,
+      questionType: type,
+      options: normalizedOptions,
+      correctAnswers: resolvedCorrectAnswers as number[],
+      acceptedAnswers: acceptedAnswers.map((answer) => (answer as string).trim()),
+      difficulty: difficulty as "basic" | "advanced",
       explanation: explanation.trim(),
     });
   }
@@ -170,6 +208,8 @@ export async function POST(request: NextRequest) {
     customQuestions?: unknown;
     durationSec?: unknown;
     dueAt?: unknown;
+    category?: unknown;
+    solutionDisplay?: unknown;
   };
   try {
     body = await request.json();
@@ -263,6 +303,8 @@ export async function POST(request: NextRequest) {
     const questionIds = parseQuestionIds(body.questionIds);
     const customQuestions = parseCustomQuestions(body.customQuestions);
     const durationSec = body.durationSec === undefined ? 1800 : Number(body.durationSec);
+    const category = body.category === undefined ? "chapter" : body.category;
+    const solutionDisplay = body.solutionDisplay === undefined ? "after_submit" : body.solutionDisplay;
     if (
       questionIds === null ||
       customQuestions === null ||
@@ -270,7 +312,9 @@ export async function POST(request: NextRequest) {
       questionIds.length + customQuestions.length > 100 ||
       !Number.isInteger(durationSec) ||
       durationSec < 60 ||
-      durationSec > 7200
+      durationSec > 7200 ||
+      !["chapter", "comprehensive"].includes(category as string) ||
+      !["after_submit", "immediate"].includes(solutionDisplay as string)
     ) {
       return NextResponse.json({ error: "Bài thi cần 1–100 câu hỏi và thời gian 1–120 phút." }, { status: 400 });
     }
@@ -280,7 +324,15 @@ export async function POST(request: NextRequest) {
     if (bankQuestions.length !== questionIds.length) return NextResponse.json({ error: "Một số câu hỏi ngân hàng không tồn tại." }, { status: 400 });
     const [created] = await db.transaction(async (tx) => {
       const [assignment] = await tx.insert(assignments)
-        .values({ courseId, title, description, dueAt, durationSec })
+        .values({
+          courseId,
+          title,
+          description,
+          dueAt,
+          durationSec,
+          category: category as string,
+          solutionDisplay: solutionDisplay as string,
+        })
         .returning();
       const questionValues = [
         ...questionIds.map((questionId, sortOrder) => {
@@ -291,6 +343,10 @@ export async function POST(request: NextRequest) {
             content: question.content,
             options: question.options,
             correctIndex: question.correctIndex,
+            questionType: "single_choice",
+            correctAnswers: [question.correctIndex],
+            acceptedAnswers: [],
+            difficulty: question.difficulty,
             explanation: question.explanation,
             sortOrder,
           };
@@ -298,6 +354,7 @@ export async function POST(request: NextRequest) {
         ...customQuestions.map((question, index) => ({
           assignmentId: assignment.id,
           sourceQuestionId: null,
+          correctIndex: question.correctAnswers[0] ?? 0,
           ...question,
           sortOrder: questionIds.length + index,
         })),

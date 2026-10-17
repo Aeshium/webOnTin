@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { assignmentQuestions, assignmentSubmissions, assignments, courses, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { gradeAssignmentAnswer, type AssignmentAnswer } from "@/lib/assignment-questions";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,11 @@ export async function GET() {
         id: assignmentQuestions.id,
         content: assignmentQuestions.content,
         options: assignmentQuestions.options,
+        questionType: assignmentQuestions.questionType,
+        difficulty: assignmentQuestions.difficulty,
         correctIndex: assignmentQuestions.correctIndex,
+        correctAnswers: assignmentQuestions.correctAnswers,
+        acceptedAnswers: assignmentQuestions.acceptedAnswers,
         explanation: assignmentQuestions.explanation,
         sortOrder: assignmentQuestions.sortOrder,
       })
@@ -66,7 +71,7 @@ export async function GET() {
     reviewQuestions: (questionsByAssignment.get(row.assignmentId) ?? []).map((question, index) => ({
       ...question,
       selectedAnswer: row.selectedAnswers?.[index] ?? null,
-      isCorrect: row.selectedAnswers?.[index] === question.correctIndex,
+      ...gradeAssignmentAnswer(question, row.selectedAnswers?.[index] ?? null as AssignmentAnswer),
     })),
   })));
 }

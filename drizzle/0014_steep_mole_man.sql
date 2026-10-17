@@ -1,0 +1,1 @@
+ALTER TABLE "assignment_questions" ALTER COLUMN "question_type" SET DEFAULT 'single_choice';

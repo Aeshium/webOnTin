@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, isNotNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import {
@@ -24,6 +24,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       description: assignments.description,
       dueAt: assignments.dueAt,
       durationSec: assignments.durationSec,
+      category: assignments.category,
+      solutionDisplay: assignments.solutionDisplay,
       courseId: courses.id,
       courseTitle: courses.title,
     })
@@ -42,7 +44,11 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       content: assignmentQuestions.content,
       options: assignmentQuestions.options,
       order: assignmentQuestions.sortOrder,
+      questionType: assignmentQuestions.questionType,
+      difficulty: assignmentQuestions.difficulty,
       correctIndex: assignmentQuestions.correctIndex,
+      correctAnswers: assignmentQuestions.correctAnswers,
+      acceptedAnswers: assignmentQuestions.acceptedAnswers,
       explanation: assignmentQuestions.explanation,
     })
       .from(assignmentQuestions)
@@ -60,7 +66,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .from(assignmentSubmissions)
       .where(and(
         eq(assignmentSubmissions.assignmentId, assignmentId),
-        eq(assignmentSubmissions.userId, user.id)
+        eq(assignmentSubmissions.userId, user.id),
+        ...(request.nextUrl.searchParams.get("review") === "latest-submitted"
+          ? [isNotNull(assignmentSubmissions.submittedAt)]
+          : [])
       ))
       .orderBy(desc(assignmentSubmissions.startedAt))
       .limit(1),
@@ -68,9 +77,20 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   return NextResponse.json({
     ...assignment,
     dueAt: assignment.dueAt?.toISOString() ?? null,
-    questions: latestSubmission?.submittedAt
-      ? items
-      : items.map(({ correctIndex: _correctIndex, explanation: _explanation, ...item }) => item),
+    questions: items.map((item, index) => {
+      const answer = latestSubmission?.selectedAnswers?.[index] ?? null;
+      const mayReveal = Boolean(latestSubmission?.submittedAt) ||
+        (assignment.solutionDisplay === "immediate" && answer !== null);
+      if (mayReveal) return item;
+      const {
+        correctIndex: _correctIndex,
+        correctAnswers: _correctAnswers,
+        acceptedAnswers: _acceptedAnswers,
+        explanation: _explanation,
+        ...safeItem
+      } = item;
+      return safeItem;
+    }),
     latestSubmission: latestSubmission ? {
       ...latestSubmission,
       startedAt: latestSubmission.startedAt?.toISOString() ?? null,

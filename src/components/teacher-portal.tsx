@@ -6,11 +6,22 @@ import { TeacherLessonEditor, type TeacherLesson } from "@/components/teacher-le
 import { getLessonContentPreview } from "@/lib/lesson-content";
 
 type Lesson = TeacherLesson;
-type Assignment = { id: number; title: string; description: string; dueAt: string | null; durationSec: number };
+type Assignment = {
+  id: number;
+  title: string;
+  description: string;
+  dueAt: string | null;
+  durationSec: number;
+  category: "chapter" | "comprehensive";
+  solutionDisplay: "after_submit" | "immediate";
+};
 type CustomQuestionDraft = {
   content: string;
-  options: [string, string, string, string];
-  correctIndex: number;
+  questionType: "single_choice" | "multiple_choice" | "true_false" | "short_answer";
+  options: string[];
+  correctAnswers: number[];
+  acceptedAnswers: string[];
+  difficulty: "basic" | "advanced";
   explanation: string;
 };
 type EnrolledStudent = {
@@ -50,10 +61,15 @@ type Submission = {
     id: number;
     content: string;
     options: string[];
+    questionType: CustomQuestionDraft["questionType"];
     correctIndex: number;
+    correctAnswers: number[];
+    acceptedAnswers: string[];
     explanation: string;
-    selectedAnswer: number | null;
+    selectedAnswer: number | number[] | string | null;
     isCorrect: boolean;
+    points: number;
+    correctIndexes: number[];
   }[];
 };
 
@@ -178,14 +194,27 @@ export function TeacherPortal() {
   function addCustomQuestion(courseId: number) {
     const blank: CustomQuestionDraft = {
       content: "",
+      questionType: "single_choice",
       options: ["", "", "", ""],
-      correctIndex: 0,
+      correctAnswers: [0],
+      acceptedAnswers: [],
+      difficulty: "basic",
       explanation: "",
     };
     setCustomQuestions((current) => ({
       ...current,
       [courseId]: [...(current[courseId] ?? []), blank],
     }));
+  }
+
+  function changeQuestionType(courseId: number, index: number, questionType: CustomQuestionDraft["questionType"]) {
+    const defaults: Record<CustomQuestionDraft["questionType"], Pick<CustomQuestionDraft, "options" | "correctAnswers" | "acceptedAnswers">> = {
+      single_choice: { options: ["", "", "", ""], correctAnswers: [0], acceptedAnswers: [] },
+      multiple_choice: { options: ["", "", "", ""], correctAnswers: [0, 1], acceptedAnswers: [] },
+      true_false: { options: ["Đúng", "Sai"], correctAnswers: [0], acceptedAnswers: [] },
+      short_answer: { options: [], correctAnswers: [], acceptedAnswers: [""] },
+    };
+    updateCustomQuestion(courseId, index, { questionType, ...defaults[questionType] });
   }
 
   function updateCustomQuestion(
@@ -310,6 +339,18 @@ export function TeacherPortal() {
                   <form onSubmit={(event) => void addContent(event, course.id)} className="mt-3 space-y-2 rounded-xl border border-white/8 p-3">
                     <input name="title" required minLength={2} maxLength={160} placeholder="Tên bài tập mới" className="h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
                     <textarea name="description" maxLength={5000} rows={2} placeholder="Mô tả yêu cầu" className="w-full rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-white" />
+                    <label className="block text-xs font-bold text-slate-300">Nhóm bài tập
+                      <select name="category" defaultValue="chapter" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white">
+                        <option value="chapter">Luyện tập theo chương</option>
+                        <option value="comprehensive">Bài tập tổng hợp</option>
+                      </select>
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">Hiển thị đáp án và lời giải
+                      <select name="solutionDisplay" defaultValue="after_submit" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white">
+                        <option value="after_submit">Sau khi nộp bài</option>
+                        <option value="immediate">Ngay sau khi trả lời (luyện tập)</option>
+                      </select>
+                    </label>
                     <label className="block text-xs font-bold text-slate-300">Hạn nộp
                       <input name="dueAt" required type="datetime-local" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
                     </label>
@@ -337,15 +378,58 @@ export function TeacherPortal() {
                       {(customQuestions[course.id] ?? []).map((question, index) => (
                         <fieldset key={index} className="space-y-2 rounded-xl bg-black/20 p-3">
                           <legend className="px-1 text-xs font-bold text-slate-300">Câu tự soạn {index + 1}</legend>
+                          <label className="block text-[11px] font-bold text-slate-400">Loại câu hỏi
+                            <select value={question.questionType} onChange={(event) => changeQuestionType(course.id, index, event.target.value as CustomQuestionDraft["questionType"])} className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-ink-950 px-2 text-xs text-white">
+                              <option value="single_choice">Trắc nghiệm một đáp án</option>
+                              <option value="multiple_choice">Trắc nghiệm nhiều đáp án</option>
+                              <option value="true_false">Đúng / Sai</option>
+                              <option value="short_answer">Điền đáp án ngắn</option>
+                            </select>
+                          </label>
                           <textarea required minLength={3} maxLength={2000} value={question.content} onChange={(event) => updateCustomQuestion(course.id, index, { content: event.target.value })} rows={2} placeholder="Nội dung câu hỏi" className="w-full rounded-lg border border-white/10 bg-ink-950 p-2.5 text-sm text-white" />
-                          {question.options.map((option, optionIndex) => (
+                          <label className="block text-[11px] font-bold text-slate-400">Độ khó
+                            <select value={question.difficulty} onChange={(event) => updateCustomQuestion(course.id, index, { difficulty: event.target.value as "basic" | "advanced" })} className="mt-1 h-9 w-full rounded-lg border border-white/10 bg-ink-950 px-2 text-xs text-white">
+                              <option value="basic">Cơ bản</option>
+                              <option value="advanced">Nâng cao</option>
+                            </select>
+                          </label>
+                          {question.questionType === "short_answer" ? (
+                            <label className="block text-[11px] font-bold text-slate-400">Đáp án được chấp nhận (mỗi dòng một đáp án)
+                              <textarea required value={question.acceptedAnswers.join("\n")} onChange={(event) => updateCustomQuestion(course.id, index, { acceptedAnswers: event.target.value.split(/\r?\n/).slice(0, 20) })} rows={3} placeholder={"Ví dụ:\nCPU\nbộ xử lý trung tâm"} className="mt-1 w-full rounded-lg border border-white/10 bg-ink-950 p-2.5 text-xs text-white" />
+                              <span className="mt-1 block font-normal text-slate-500">So sánh không phân biệt chữ hoa/thường và chuẩn hóa khoảng trắng.</span>
+                            </label>
+                          ) : question.options.map((option, optionIndex) => (
                             <div key={optionIndex} className="flex items-center gap-2">
-                              <input type="radio" name={`correct-${course.id}-${index}`} checked={question.correctIndex === optionIndex} onChange={() => updateCustomQuestion(course.id, index, { correctIndex: optionIndex })} aria-label={`Đặt phương án ${String.fromCharCode(65 + optionIndex)} làm đáp án đúng`} className="accent-cyan-300" />
-                              <input required maxLength={500} value={option} onChange={(event) => {
-                                const options = [...question.options] as CustomQuestionDraft["options"];
-                                options[optionIndex] = event.target.value;
-                                updateCustomQuestion(course.id, index, { options });
-                              }} placeholder={`Đáp án ${String.fromCharCode(65 + optionIndex)}`} className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-ink-950 px-2.5 text-xs text-white" />
+                              <input
+                                type={question.questionType === "multiple_choice" ? "checkbox" : "radio"}
+                                name={`correct-${course.id}-${index}`}
+                                checked={question.correctAnswers.includes(optionIndex)}
+                                onChange={(event) => {
+                                  if (question.questionType === "multiple_choice") {
+                                    const correctAnswers = event.target.checked
+                                      ? [...question.correctAnswers, optionIndex]
+                                      : question.correctAnswers.filter((answer) => answer !== optionIndex);
+                                    updateCustomQuestion(course.id, index, { correctAnswers });
+                                  } else {
+                                    updateCustomQuestion(course.id, index, { correctAnswers: [optionIndex] });
+                                  }
+                                }}
+                                aria-label={`Đặt phương án ${String.fromCharCode(65 + optionIndex)} làm đáp án đúng`}
+                                className="accent-cyan-300"
+                              />
+                              <input
+                                required
+                                maxLength={500}
+                                readOnly={question.questionType === "true_false"}
+                                value={option}
+                                onChange={(event) => {
+                                  const options = [...question.options];
+                                  options[optionIndex] = event.target.value;
+                                  updateCustomQuestion(course.id, index, { options });
+                                }}
+                                placeholder={`Đáp án ${String.fromCharCode(65 + optionIndex)}`}
+                                className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-ink-950 px-2.5 text-xs text-white read-only:opacity-70"
+                              />
                             </div>
                           ))}
                           <textarea maxLength={2000} value={question.explanation} onChange={(event) => updateCustomQuestion(course.id, index, { explanation: event.target.value })} rows={2} placeholder="Giải thích đáp án" className="w-full rounded-lg border border-white/10 bg-ink-950 p-2.5 text-xs text-white" />
@@ -432,8 +516,17 @@ export function TeacherPortal() {
                 <div className="mt-4 space-y-4">
                   {submission.reviewQuestions.map((question, index) => <div key={question.id} className="border-t border-white/8 pt-3">
                     <p className="text-sm font-bold text-white">Câu {index + 1}. {question.content}</p>
-                    <p className={`mt-2 text-xs ${question.isCorrect ? "text-emerald-200" : "text-rose-200"}`}>Học sinh chọn: {question.selectedAnswer === null ? "Bỏ trống" : `${String.fromCharCode(65 + question.selectedAnswer)}. ${question.options[question.selectedAnswer]}`} {question.isCorrect ? "✓" : ""}</p>
-                    {!question.isCorrect && <p className="mt-1 text-xs text-cyan-100">Đáp án đúng: {String.fromCharCode(65 + question.correctIndex)}. {question.options[question.correctIndex]}</p>}
+                    <p className={`mt-2 text-xs ${question.isCorrect ? "text-emerald-200" : question.points > 0 ? "text-amber-200" : "text-rose-200"}`}>
+                      Học sinh trả lời: {Array.isArray(question.selectedAnswer)
+                        ? question.selectedAnswer.length ? question.selectedAnswer.map((answer) => `${String.fromCharCode(65 + answer)}. ${question.options[answer]}`).join(" · ") : "Bỏ trống"
+                        : typeof question.selectedAnswer === "number"
+                          ? `${String.fromCharCode(65 + question.selectedAnswer)}. ${question.options[question.selectedAnswer]}`
+                          : question.selectedAnswer || "Bỏ trống"}
+                      {" · "}{Math.round(question.points * 100)}% điểm
+                    </p>
+                    {!question.isCorrect && <p className="mt-1 text-xs text-cyan-100">Đáp án đúng: {question.questionType === "short_answer"
+                      ? question.acceptedAnswers.join(" / ")
+                      : question.correctIndexes.map((answer) => `${String.fromCharCode(65 + answer)}. ${question.options[answer]}`).join(" · ")}</p>}
                     {question.explanation && <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-400">{question.explanation}</p>}
                   </div>)}
                 </div>

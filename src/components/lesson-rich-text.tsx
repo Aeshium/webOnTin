@@ -219,7 +219,7 @@ export function LessonRichTextContent({ content }: { content: string }) {
     immediatelyRender: false,
     editorProps: {
       attributes: {
-        class: "lesson-rich-content text-sm leading-7 text-slate-300",
+        class: "lesson-rich-content text-base leading-8 text-slate-300 sm:text-lg",
       },
     },
   });

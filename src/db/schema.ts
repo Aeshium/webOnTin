@@ -160,6 +160,8 @@ export const assignments = pgTable("assignments", {
   description: text("description").notNull().default(""),
   dueAt: timestamp("due_at", { withTimezone: true }),
   durationSec: integer("duration_sec").notNull().default(1800),
+  category: text("category").notNull().default("chapter"),
+  solutionDisplay: text("solution_display").notNull().default("after_submit"),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
@@ -178,6 +180,10 @@ export const assignmentQuestions = pgTable(
     content: text("content").notNull(),
     options: jsonb("options").$type<string[]>().notNull(),
     correctIndex: integer("correct_index").notNull(),
+    questionType: text("question_type").notNull().default("single_choice"),
+    correctAnswers: jsonb("correct_answers").$type<number[]>().notNull().default(sql`'[]'::jsonb`),
+    acceptedAnswers: jsonb("accepted_answers").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    difficulty: text("difficulty").notNull().default("basic"),
     explanation: text("explanation").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
   },
@@ -197,7 +203,7 @@ export const assignmentSubmissions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     content: text("content").notNull().default(""),
-    selectedAnswers: jsonb("selected_answers").$type<(number | null)[]>(),
+    selectedAnswers: jsonb("selected_answers").$type<(number | number[] | string | null)[]>(),
     currentIndex: integer("current_index").notNull().default(0),
     startedAt: timestamp("started_at", { withTimezone: true }),
     score: integer("score"),

@@ -9,6 +9,7 @@ import {
   courses,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { gradeAssignment, isValidAssignmentAnswer } from "@/lib/assignment-questions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +33,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     (body.sessionId as number) <= 0 ||
     !Array.isArray(body.questionIds) ||
     !body.questionIds.every((id) => Number.isInteger(id) && (id as number) > 0) ||
-    !Array.isArray(body.answers) ||
-    !body.answers.every((answer) => answer === null || (Number.isInteger(answer) && answer >= 0 && answer <= 3))
+    !Array.isArray(body.answers)
   ) {
     return NextResponse.json({ error: "Danh sách câu trả lời không hợp lệ." }, { status: 400 });
   }
@@ -42,6 +42,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       id: assignments.id,
       dueAt: assignments.dueAt,
       durationSec: assignments.durationSec,
+      solutionDisplay: assignments.solutionDisplay,
     })
     .from(assignments)
     .innerJoin(courses, eq(assignments.courseId, courses.id))
@@ -55,19 +56,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   const questions = await db
     .select({
       id: assignmentQuestions.id,
+      questionType: assignmentQuestions.questionType,
+      options: assignmentQuestions.options,
       correctIndex: assignmentQuestions.correctIndex,
+      correctAnswers: assignmentQuestions.correctAnswers,
+      acceptedAnswers: assignmentQuestions.acceptedAnswers,
       explanation: assignmentQuestions.explanation,
     })
     .from(assignmentQuestions)
     .where(eq(assignmentQuestions.assignmentId, assignmentId))
     .orderBy(asc(assignmentQuestions.sortOrder));
   const suppliedIds = body.questionIds as number[];
-  const answers = body.answers as (number | null)[];
+  const answers = body.answers as Parameters<typeof gradeAssignment>[1];
   if (
     questions.length === 0 ||
     suppliedIds.length !== questions.length ||
     answers.length !== questions.length ||
-    suppliedIds.some((id, index) => id !== questions[index].id)
+    suppliedIds.some((id, index) => id !== questions[index].id) ||
+    questions.some((question, index) => !isValidAssignmentAnswer(question, answers[index]))
   ) {
     return NextResponse.json({ error: "Danh sách câu hỏi đã thay đổi. Tải lại bài thi rồi thử lại." }, { status: 409 });
   }
@@ -95,17 +101,14 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (submittedAt.getTime() > expiresAt + 15_000) {
       return { error: "Đã hết thời gian hoặc bài tập quá hạn." as const };
     }
-    const correctCount = questions.reduce(
-      (count, question, index) => count + (answers[index] === question.correctIndex ? 1 : 0),
-      0
-    );
-    const score = Math.round((correctCount / questions.length) * 100);
+    const grading = gradeAssignment(questions, answers);
+    const correctCount = grading.correctCount;
     const [submission] = await tx
       .update(assignmentSubmissions)
       .set({
         selectedAnswers: answers,
         content: JSON.stringify(answers),
-        score,
+        score: grading.score,
         submittedAt,
         gradedAt: submittedAt,
       })

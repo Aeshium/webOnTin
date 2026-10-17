@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { assignmentQuestions, assignmentSubmissions, assignments, courseEnrollments, courses } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { gradeAssignment, isValidAssignmentAnswer, type AssignmentAnswer } from "@/lib/assignment-questions";
 
 export async function POST(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const user = await getCurrentUser();
@@ -44,20 +45,21 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
       );
       if (Date.now() > expiresAt + 15_000) {
         const questions = await tx.select({
+          questionType: assignmentQuestions.questionType,
+          options: assignmentQuestions.options,
           correctIndex: assignmentQuestions.correctIndex,
+          correctAnswers: assignmentQuestions.correctAnswers,
+          acceptedAnswers: assignmentQuestions.acceptedAnswers,
         })
           .from(assignmentQuestions)
           .where(eq(assignmentQuestions.assignmentId, assignmentId))
           .orderBy(asc(assignmentQuestions.sortOrder));
         const answers = active.selectedAnswers ?? [];
-        const correctCount = questions.reduce(
-          (count, item, index) => count + (answers[index] === item.correctIndex ? 1 : 0),
-          0
-        );
+        const grading = gradeAssignment(questions, answers);
         const submittedAt = new Date();
         await tx.update(assignmentSubmissions)
           .set({
-            score: Math.round((correctCount / questions.length) * 100),
+            score: grading.score,
             content: JSON.stringify(answers),
             submittedAt,
             gradedAt: submittedAt,
@@ -101,7 +103,6 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     !Array.isArray(body.questionIds) ||
     !body.questionIds.every((id) => Number.isInteger(id) && id > 0) ||
     !Array.isArray(body.answers) ||
-    !body.answers.every((answer) => answer === null || (Number.isInteger(answer) && answer >= 0 && answer <= 3)) ||
     !Number.isInteger(body.currentIndex) ||
     (body.currentIndex as number) < 0
   ) return NextResponse.json({ error: "Tiến trình làm bài không hợp lệ." }, { status: 400 });
@@ -117,18 +118,27 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     .where(eq(assignments.id, assignmentId))
     .limit(1);
   if (!assignment) return NextResponse.json({ error: "Không tìm thấy bài tập hoặc bạn chưa tham gia khóa học." }, { status: 404 });
-  const questions = await db.select({ id: assignmentQuestions.id })
+  const questions = await db.select({
+    id: assignmentQuestions.id,
+    questionType: assignmentQuestions.questionType,
+    options: assignmentQuestions.options,
+    correctIndex: assignmentQuestions.correctIndex,
+    correctAnswers: assignmentQuestions.correctAnswers,
+    acceptedAnswers: assignmentQuestions.acceptedAnswers,
+  })
     .from(assignmentQuestions)
     .where(eq(assignmentQuestions.assignmentId, assignmentId))
     .orderBy(asc(assignmentQuestions.sortOrder));
   const questionIds = body.questionIds as number[];
-  const answers = body.answers as (number | null)[];
+  const answers = body.answers as AssignmentAnswer[];
   if (
     questions.length === 0 ||
     questions.length !== questionIds.length ||
     answers.length !== questions.length ||
     (body.currentIndex as number) >= questions.length ||
-    questions.some((question, index) => question.id !== questionIds[index])
+    questions.some((question, index) =>
+      question.id !== questionIds[index] || !isValidAssignmentAnswer(question, answers[index])
+    )
   ) return NextResponse.json({ error: "Danh sách câu hỏi đã thay đổi. Tải lại bài thi rồi thử lại." }, { status: 409 });
 
   const saved = await db.transaction(async (tx) => {

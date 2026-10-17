@@ -184,7 +184,7 @@ export function StudentLessons() {
   const activeLessonIndex = course?.lessons.findIndex((lesson) => lesson.id === activeLessonId) ?? -1;
 
   return (
-    <main className="mx-auto max-w-6xl px-4 pb-20 pt-28 sm:px-6">
+    <main className="mx-auto max-w-[1600px] px-3 pb-20 pt-24 sm:px-5 lg:px-8">
       <p className="text-xs font-bold uppercase tracking-[0.2em] text-cyan-300">Học tập</p>
       <h1 className="mt-2 text-3xl font-black text-white">Học Bài</h1>
       <p className="mt-2 text-sm text-slate-400">Đọc theo từng phần và kiểm tra mức độ hiểu ngay trong bài học.</p>
@@ -196,38 +196,38 @@ export function StudentLessons() {
           {lessonMenuOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           {activeLesson?.title ?? (activeCourseId !== null ? "Chọn bài học" : "Chọn khóa học")}
         </button>
-        <div className="mt-4 grid gap-5 lg:mt-7 lg:grid-cols-[280px_1fr]">
-          <aside className={`space-y-3 ${lessonMenuOpen ? "block" : "hidden lg:block"}`}>
+        <div className="mt-4 grid gap-4 lg:mt-7 lg:grid-cols-[220px_minmax(0,1fr)] xl:grid-cols-[240px_minmax(0,1fr)] xl:gap-6">
+          <aside className={`space-y-2.5 ${lessonMenuOpen ? "block" : "hidden lg:sticky lg:top-24 lg:block lg:max-h-[calc(100svh-7rem)] lg:overflow-y-auto lg:pr-1"}`}>
             {course && activeCourseId !== null && (
-              <section className="rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+              <section className="rounded-xl border border-white/10 bg-white/[0.035] p-3">
                 <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">Tiến độ khóa học</p>
-                <p className="mt-2 text-sm font-bold text-white">{completedLessonCount}/{course.lessons.length} bài đã hoàn thành</p>
-                <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-white/10">
+                <p className="mt-1.5 text-xs font-bold text-white">{completedLessonCount}/{course.lessons.length} bài đã hoàn thành</p>
+                <div className="mt-2 h-1 overflow-hidden rounded-full bg-white/10">
                   <div className="h-full rounded-full bg-cyan-300 transition-[width]" style={{ width: `${course.lessons.length ? completedLessonCount / course.lessons.length * 100 : 0}%` }} />
                 </div>
-                <p className="mt-2 text-[11px] text-slate-500">Tiến độ chỉ lưu trong tab này.</p>
+                <p className="mt-1.5 text-[10px] text-slate-500">Tiến độ chỉ lưu trong tab này.</p>
               </section>
             )}
             {activeCourseId !== null && (
-              <button type="button" onClick={() => { setActiveCourseId(null); setCourse(null); setActiveLessonId(null); setLessonMenuOpen(false); }} className="w-full rounded-xl border border-white/10 px-4 py-3 text-left text-sm font-bold text-cyan-200 hover:bg-white/5">
+              <button type="button" onClick={() => { setActiveCourseId(null); setCourse(null); setActiveLessonId(null); setLessonMenuOpen(false); }} className="w-full rounded-lg border border-white/10 px-3 py-2 text-left text-xs font-bold text-cyan-200 hover:bg-white/5">
                 ← Tất cả khóa học
               </button>
             )}
             {(activeCourseId === null ? courses : courses.filter((item) => item.id === activeCourseId)).map((item) => (
-              <section key={item.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-3">
+              <section key={item.id} className="rounded-xl border border-white/10 bg-white/[0.035] p-2">
                 {activeCourseId === null
-                  ? <button type="button" disabled={busy} onClick={() => void openCourse(item.id)} className="w-full text-left text-sm font-black text-white hover:text-cyan-200 disabled:opacity-50">{item.title}<span className="mt-1 block text-xs font-normal text-slate-500">{item.lessons.length} bài học</span></button>
-                  : <h2 className="px-2 py-2 text-sm font-black text-white">{course?.courseTitle ?? item.title}</h2>}
-                {activeCourseId !== null && <nav className="mt-2 space-y-1">
+                  ? <button type="button" disabled={busy} onClick={() => void openCourse(item.id)} className="w-full rounded-lg px-2 py-1.5 text-left text-xs font-black text-white hover:bg-white/5 hover:text-cyan-200 disabled:opacity-50">{item.title}<span className="mt-0.5 block text-[10px] font-normal text-slate-500">{item.lessons.length} bài học</span></button>
+                  : <h2 className="truncate px-2 py-1.5 text-xs font-black text-white">{course?.courseTitle ?? item.title}</h2>}
+                {activeCourseId !== null && <nav className="mt-1 space-y-0.5">
                   {course?.lessons.map((lesson) => {
                     const summary = item.lessons.find((entry) => entry.id === lesson.id);
                     const completeCount = Object.keys(answers[lesson.id] ?? {}).length;
                     const isComplete = completedLessons[lesson.id] === true;
                     return (
-                      <div key={lesson.id} className={`flex items-start gap-2 rounded-lg p-2.5 text-xs ${activeLessonId === lesson.id ? "bg-cyan-300/10 text-cyan-100" : "text-slate-300 hover:bg-white/5"}`}>
+                      <div key={lesson.id} className={`flex items-start gap-1.5 rounded-lg p-2 text-xs ${activeLessonId === lesson.id ? "bg-cyan-300/10 text-cyan-100" : "text-slate-300 hover:bg-white/5"}`}>
                         <button type="button" onClick={() => openLesson(lesson.id)} aria-current={activeLessonId === lesson.id ? "page" : undefined} className="min-w-0 flex-1 text-left">
                           <span className="block font-bold">{lesson.title}</span>
-                          <span className="mt-1 block text-[11px] text-slate-500">{isComplete ? "Đã hoàn thành" : `${completeCount}/${summary?.questionCount ?? lesson.questions.length} câu đã ôn`}</span>
+                          <span className="mt-0.5 block text-[10px] text-slate-500">{isComplete ? "Đã hoàn thành" : `${completeCount}/${summary?.questionCount ?? lesson.questions.length} câu đã ôn`}</span>
                         </button>
                         {isComplete && <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-300" aria-label="Bài học đã hoàn thành" />}
                       </div>
@@ -236,17 +236,17 @@ export function StudentLessons() {
                 </nav>}
               </section>
             ))}
-            {courses.length === 0 && <p className="rounded-2xl border border-dashed border-white/15 p-5 text-sm text-slate-500">Bạn chưa tham gia khóa học nào.</p>}
+            {courses.length === 0 && <p className="rounded-xl border border-dashed border-white/15 p-3 text-xs text-slate-500">Bạn chưa tham gia khóa học nào.</p>}
           </aside>
 
-          <section className="min-h-[360px] rounded-2xl border border-white/10 bg-white/[0.035] p-5 sm:p-7">
+          <section className="min-h-[70vh] min-w-0 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.055] to-white/[0.025] p-5 shadow-xl shadow-black/10 sm:p-8 lg:p-10">
             {!course && <div className="grid min-h-[300px] place-items-center text-center text-sm text-slate-500">Chọn một khóa học để bắt đầu ôn tập.</div>}
             {course && !activeLesson && <div className="grid min-h-[300px] place-items-center text-center text-sm text-slate-500">Chọn bài học trong danh sách.</div>}
             {activeLesson && (
               <>
                 <p className="text-xs font-bold text-cyan-200">{course?.courseTitle}</p>
-                <h2 className="mt-2 text-2xl font-black text-white">{activeLesson.title}</h2>
-                {activeLesson.description && <p className="mt-2 text-sm text-slate-400">{activeLesson.description}</p>}
+                <h2 className="mt-2 text-3xl font-black tracking-tight text-white sm:text-4xl">{activeLesson.title}</h2>
+                {activeLesson.description && <p className="mt-3 max-w-4xl text-base leading-7 text-slate-400">{activeLesson.description}</p>}
                 {lessonHeadings.length > 1 && (
                   <nav aria-label="Mục lục bài học" className="mt-5 rounded-xl border border-white/10 bg-black/20 p-4">
                     <p className="text-xs font-black uppercase tracking-[0.12em] text-slate-300">Mục lục bài học</p>
