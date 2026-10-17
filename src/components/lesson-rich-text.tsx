@@ -11,11 +11,16 @@ import TableRow from "@tiptap/extension-table-row";
 import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import { parseLessonContent, serializeLessonContent } from "@/lib/lesson-content";
+import { LessonCalloutExtension, LessonHeadingExtension } from "@/lib/lesson-content-extensions";
+import { LessonQuestionExtension } from "@/lib/lesson-question-extension";
 
 const EDITOR_EXTENSIONS = [
   StarterKit.configure({
     link: false,
+    heading: false,
   }),
+  LessonHeadingExtension,
+  LessonCalloutExtension,
   Link.configure({
     openOnClick: false,
     autolink: true,
@@ -26,7 +31,10 @@ const EDITOR_EXTENSIONS = [
   TableRow,
   TableHeader,
   TableCell,
+  LessonQuestionExtension,
 ];
+
+type AvailableQuestion = { id: number; content: string };
 
 function safeUrl(value: string, allowImagePath: boolean) {
   const url = value.trim();
@@ -44,12 +52,15 @@ function safeUrl(value: string, allowImagePath: boolean) {
 export function LessonRichTextEditor({
   content,
   onChange,
+  availableQuestions = [],
 }: {
   content: string;
   onChange: (content: string) => void;
+  availableQuestions?: AvailableQuestion[];
 }) {
   const [linkInput, setLinkInput] = useState("");
   const [imageInput, setImageInput] = useState("");
+  const [questionId, setQuestionId] = useState("");
   const [toolbarError, setToolbarError] = useState("");
   const editor = useEditor({
     extensions: EDITOR_EXTENSIONS,
@@ -121,6 +132,7 @@ export function LessonRichTextEditor({
           </button>
         ))}
         <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => run(() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run())} className="h-8 rounded-md px-2 text-xs font-bold text-slate-300 hover:bg-white/10">Bảng</button>
+        <button type="button" onMouseDown={(event) => event.preventDefault()} onClick={() => run(() => editor.chain().focus().wrapIn("lessonCallout").run())} className="h-8 rounded-md px-2 text-xs font-bold text-amber-100 hover:bg-amber-300/10">Ghi nhớ</button>
       </div>
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
         <form onSubmit={(event) => { event.preventDefault(); applyLink(); }} className="flex min-w-56 flex-1 gap-1">
@@ -132,6 +144,42 @@ export function LessonRichTextEditor({
           <button type="submit" className="rounded-md border border-white/10 px-2 text-xs text-slate-200">Chèn ảnh</button>
         </form>
       </div>
+      {availableQuestions.length > 0 && (
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/10 px-3 py-2">
+          <label className="min-w-56 flex-1 text-xs text-slate-400">
+            Chèn câu hỏi tại vị trí con trỏ
+            <select value={questionId} onChange={(event) => setQuestionId(event.target.value)} className="mt-1 h-9 w-full rounded-md border border-white/10 bg-ink-950 px-2 text-xs text-slate-200">
+              <option value="">Chọn câu hỏi đã đính kèm</option>
+              {availableQuestions.map((question) => (
+                <option key={question.id} value={question.id}>#{question.id} · {question.content.slice(0, 100)}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            disabled={!questionId}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => {
+              const selectedId = Number(questionId);
+              if (!availableQuestions.some((question) => question.id === selectedId)) {
+                setToolbarError("Hãy chọn câu hỏi đã được đính kèm vào bài học.");
+                return;
+              }
+              run(() => {
+                editor.chain().focus().command(({ tr, state }) => {
+                  const { $from } = state.selection;
+                  const position = $from.depth > 0 ? $from.after(1) : $from.pos;
+                  tr.insert(position, state.schema.nodes.lessonQuestion.create({ questionId: selectedId }));
+                  return true;
+                }).run();
+              });
+            }}
+            className="mt-4 h-9 rounded-md border border-cyan-300/20 px-3 text-xs font-bold text-cyan-100 hover:bg-cyan-300/10 disabled:opacity-40"
+          >
+            Chèn vào bài
+          </button>
+        </div>
+      )}
       {toolbarError && <p role="alert" className="px-3 pt-2 text-xs text-rose-200">{toolbarError}</p>}
       <EditorContent editor={editor} />
       <p className="border-t border-white/10 px-3 py-2 text-[11px] text-slate-500">Nội dung cũ dạng văn bản sẽ được mở thành đoạn văn; định dạng được lưu tương thích ở dạng tài liệu có cấu trúc.</p>

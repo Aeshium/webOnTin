@@ -32,8 +32,7 @@ type NotificationItem = {
 const NAV_LINKS = [
   { href: "/", label: "Trang chủ" },
   { href: "/#chuyen-de", label: "Chuyên đề" },
-  { href: "/bai-hoc", label: "Bài học" },
-  { href: "/bai-tap", label: "Bài tập" },
+  { href: "/hoc-tap", label: "Học Tập" },
   { href: "/bang-xep-hang", label: "Xếp hạng" },
   { href: "/tra-cuu", label: "Tra cứu câu hỏi" },
 ];

@@ -13,6 +13,7 @@ import {
   users,
 } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
+import { getLessonQuestionIds, hasNestedLessonQuestionBlocks } from "@/lib/lesson-content";
 
 export const dynamic = "force-dynamic";
 
@@ -223,6 +224,12 @@ export async function POST(request: NextRequest) {
     }
     if (questionIds === null) return NextResponse.json({ error: "Danh sách câu hỏi không hợp lệ." }, { status: 400 });
     if (questionIds.length > 100) return NextResponse.json({ error: "Mỗi bài học tối đa 100 câu hỏi." }, { status: 400 });
+    if (hasNestedLessonQuestionBlocks(content)) {
+      return NextResponse.json({ error: "Khối câu hỏi cần nằm giữa các phần nội dung của bài học." }, { status: 400 });
+    }
+    if (getLessonQuestionIds(content).some((questionId) => !questionIds.includes(questionId))) {
+      return NextResponse.json({ error: "Mọi khối câu hỏi trong nội dung phải được đính kèm vào bài học." }, { status: 400 });
+    }
     const validQuestions = questionIds.length
       ? await db.select({ id: questions.id }).from(questions).where(inArray(questions.id, questionIds))
       : [];
@@ -338,6 +345,16 @@ export async function PATCH(request: NextRequest) {
     }
     const questionIds = body.questionIds === undefined ? null : parseQuestionIds(body.questionIds);
     if (questionIds === null && body.questionIds !== undefined || questionIds !== null && questionIds.length > 100) return NextResponse.json({ error: "Danh sách câu hỏi không hợp lệ (tối đa 100)." }, { status: 400 });
+    const attachedQuestionIds = questionIds ?? (await db.select({ questionId: lessonQuestions.questionId })
+      .from(lessonQuestions)
+      .where(eq(lessonQuestions.lessonId, id)))
+      .map((item) => item.questionId);
+    if (hasNestedLessonQuestionBlocks(content)) {
+      return NextResponse.json({ error: "Khối câu hỏi cần nằm giữa các phần nội dung của bài học." }, { status: 400 });
+    }
+    if (getLessonQuestionIds(content).some((questionId) => !attachedQuestionIds.includes(questionId))) {
+      return NextResponse.json({ error: "Mọi khối câu hỏi trong nội dung phải được đính kèm vào bài học." }, { status: 400 });
+    }
     const validQuestions = questionIds?.length
       ? await db.select({ id: questions.id }).from(questions).where(inArray(questions.id, questionIds))
       : [];

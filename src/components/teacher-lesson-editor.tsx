@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { X } from "lucide-react";
 import { LessonRichTextEditor } from "@/components/lesson-rich-text";
 import { QuestionBankPicker, type BankQuestion } from "@/components/question-bank-picker";
@@ -32,6 +32,26 @@ export function TeacherLessonEditor({
   const [selectedQuestions, setSelectedQuestions] = useState<BankQuestion[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!lesson?.questionIds.length) return;
+    const controller = new AbortController();
+    fetch(`/api/teacher/question-bank?ids=${lesson.questionIds.join(",")}`, {
+      cache: "no-store",
+      signal: controller.signal,
+    })
+      .then(async (response) => {
+        const result: { items?: BankQuestion[]; error?: string } = await response.json();
+        if (!response.ok) throw new Error(result.error ?? "Không tải được câu hỏi đã đính kèm.");
+        if (!controller.signal.aborted) setSelectedQuestions(result.items ?? []);
+      })
+      .catch((caught: unknown) => {
+        if (!controller.signal.aborted) {
+          setError(caught instanceof Error ? caught.message : "Không tải được câu hỏi đã đính kèm.");
+        }
+      });
+    return () => controller.abort();
+  }, [lesson]);
 
   async function save(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -93,7 +113,12 @@ export function TeacherLessonEditor({
 
           <section>
             <h3 className="mb-2 text-sm font-black text-white">1. Nội dung lý thuyết</h3>
-            <LessonRichTextEditor content={content} onChange={setContent} />
+            <LessonRichTextEditor
+              content={content}
+              onChange={setContent}
+              availableQuestions={selectedQuestions}
+            />
+            <p className="mt-2 text-xs text-slate-500">Đặt con trỏ trong phần nội dung, chọn câu đã đính kèm rồi chèn vào sau phần đó. Có thể kéo khối để đổi vị trí; chọn khối và nhấn Delete để gỡ.</p>
           </section>
 
           <section className="mt-5">
