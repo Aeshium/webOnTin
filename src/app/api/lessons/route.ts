@@ -21,6 +21,7 @@ export async function GET(request: NextRequest) {
         .select({
           id: lessons.id,
           title: lessons.title,
+          description: lessons.description,
           questionCount: sql<number>`count(${lessonQuestions.questionId})::int`,
         })
         .from(lessons)

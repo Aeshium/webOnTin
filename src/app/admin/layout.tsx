@@ -8,5 +8,5 @@ export default async function AdminLayout({ children }: { children: ReactNode })
   const user = await getCurrentUser();
   if (!user) redirect("/dang-nhap?next=%2Fadmin");
   if (user.role !== "admin") redirect(roleHomePath(user.role));
-  return <PortalShell type="admin">{children}</PortalShell>;
+  return <PortalShell type="admin" role={user.role}>{children}</PortalShell>;
 }

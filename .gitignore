@@ -4,6 +4,7 @@ out/
 build/
 dist/
 .vercel/
+note/
 
 .env*
 !.env.example

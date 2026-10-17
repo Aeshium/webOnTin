@@ -8,5 +8,5 @@ export default async function TeacherLayout({ children }: { children: ReactNode 
   const user = await getCurrentUser();
   if (!user) redirect("/dang-nhap?next=%2Fteacher");
   if (user.role !== "teacher" && user.role !== "admin") redirect(roleHomePath(user.role));
-  return <PortalShell type="teacher">{children}</PortalShell>;
+  return <PortalShell type="teacher" role={user.role}>{children}</PortalShell>;
 }

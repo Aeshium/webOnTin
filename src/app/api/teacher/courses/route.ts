@@ -216,9 +216,10 @@ export async function POST(request: NextRequest) {
   const courseId = body.courseId as number;
   if (body.kind === "lesson") {
     const content = typeof body.content === "string" ? body.content.trim() : "";
+    const lessonDescription = typeof body.description === "string" ? body.description.trim() : "";
     const questionIds = body.questionIds === undefined ? [] : parseQuestionIds(body.questionIds);
-    if (content.length < 1 || content.length > 20_000) {
-      return NextResponse.json({ error: "Nội dung bài học cần từ 1 đến 20.000 ký tự." }, { status: 400 });
+    if (content.length < 1 || content.length > 250_000 || lessonDescription.length > 500) {
+      return NextResponse.json({ error: "Nội dung lý thuyết tối đa 250.000 ký tự, mô tả ngắn tối đa 500 ký tự." }, { status: 400 });
     }
     if (questionIds === null) return NextResponse.json({ error: "Danh sách câu hỏi không hợp lệ." }, { status: 400 });
     if (questionIds.length > 100) return NextResponse.json({ error: "Mỗi bài học tối đa 100 câu hỏi." }, { status: 400 });
@@ -227,7 +228,12 @@ export async function POST(request: NextRequest) {
       : [];
     if (validQuestions.length !== questionIds.length) return NextResponse.json({ error: "Một số câu hỏi không tồn tại." }, { status: 400 });
     const created = await db.transaction(async (tx) => {
-      const [lesson] = await tx.insert(lessons).values({ courseId, title, content }).returning();
+      const [lesson] = await tx.insert(lessons).values({
+        courseId,
+        title,
+        description: lessonDescription,
+        content,
+      }).returning();
       if (questionIds.length) {
         await tx.insert(lessonQuestions).values(questionIds.map((questionId, sortOrder) => ({
           lessonId: lesson.id,
@@ -327,7 +333,9 @@ export async function PATCH(request: NextRequest) {
   }
   if (body.kind === "lesson") {
     const content = typeof body.content === "string" ? body.content.trim() : "";
-    if (!content || content.length > 20_000) return NextResponse.json({ error: "Nội dung bài học không hợp lệ." }, { status: 400 });
+    if (!content || content.length > 250_000 || description.length > 500) {
+      return NextResponse.json({ error: "Nội dung lý thuyết tối đa 250.000 ký tự, mô tả ngắn tối đa 500 ký tự." }, { status: 400 });
+    }
     const questionIds = body.questionIds === undefined ? null : parseQuestionIds(body.questionIds);
     if (questionIds === null && body.questionIds !== undefined || questionIds !== null && questionIds.length > 100) return NextResponse.json({ error: "Danh sách câu hỏi không hợp lệ (tối đa 100)." }, { status: 400 });
     const validQuestions = questionIds?.length
@@ -335,7 +343,10 @@ export async function PATCH(request: NextRequest) {
       : [];
     if (questionIds && validQuestions.length !== questionIds.length) return NextResponse.json({ error: "Một số câu hỏi không tồn tại." }, { status: 400 });
     const updated = await db.transaction(async (tx) => {
-      const [lesson] = await tx.update(lessons).set({ title, content }).where(eq(lessons.id, id)).returning();
+      const [lesson] = await tx.update(lessons)
+        .set({ title, description, content })
+        .where(eq(lessons.id, id))
+        .returning();
       if (questionIds !== null) {
         await tx.delete(lessonQuestions).where(eq(lessonQuestions.lessonId, id));
       }

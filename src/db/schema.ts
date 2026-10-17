@@ -123,6 +123,7 @@ export const lessons = pgTable(
       .notNull()
       .references(() => courses.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
+    description: text("description").notNull().default(""),
     content: text("content").notNull(),
     sortOrder: integer("sort_order").notNull().default(0),
     createdAt: timestamp("created_at", { withTimezone: true })

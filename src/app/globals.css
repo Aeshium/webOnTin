@@ -67,6 +67,75 @@ body {
   color: transparent;
 }
 
+.lesson-rich-content > * + * {
+  margin-top: 0.8rem;
+}
+.lesson-rich-content h1,
+.lesson-rich-content h2,
+.lesson-rich-content h3 {
+  margin-top: 1.4rem;
+  color: #f8fafc;
+  font-weight: 800;
+  line-height: 1.3;
+}
+.lesson-rich-content h1 { font-size: 1.5rem; }
+.lesson-rich-content h2 { font-size: 1.25rem; }
+.lesson-rich-content h3 { font-size: 1.1rem; }
+.lesson-rich-content ul,
+.lesson-rich-content ol {
+  padding-left: 1.5rem;
+}
+.lesson-rich-content ul { list-style: disc; }
+.lesson-rich-content ol { list-style: decimal; }
+.lesson-rich-content a {
+  color: #67e8f9;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.lesson-rich-content blockquote {
+  border-left: 3px solid rgba(103, 232, 249, 0.55);
+  padding-left: 1rem;
+  color: #cbd5e1;
+}
+.lesson-rich-content code {
+  border-radius: 0.3rem;
+  background: rgba(148, 163, 184, 0.15);
+  padding: 0.12rem 0.3rem;
+  color: #bae6fd;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.lesson-rich-content pre {
+  overflow-x: auto;
+  border: 1px solid rgba(148, 163, 184, 0.16);
+  border-radius: 0.8rem;
+  background: #050914;
+  padding: 1rem;
+}
+.lesson-rich-content pre code {
+  background: transparent;
+  padding: 0;
+  color: #e2e8f0;
+}
+.lesson-rich-content img {
+  max-width: 100%;
+  border-radius: 0.8rem;
+}
+.lesson-rich-content table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.lesson-rich-content th,
+.lesson-rich-content td {
+  min-width: 7rem;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+  padding: 0.5rem 0.7rem;
+  text-align: left;
+}
+.lesson-rich-content th {
+  background: rgba(148, 163, 184, 0.1);
+  color: #f8fafc;
+}
+
 /* Hiệu ứng chạy chữ marquee */
 @keyframes marquee {
   from {

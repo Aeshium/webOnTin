@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { LessonRichTextContent } from "@/components/lesson-rich-text";
 
-type LessonSummary = { id: number; title: string; questionCount: number };
+type LessonSummary = { id: number; title: string; description: string; questionCount: number };
 type CourseSummary = { id: number; title: string; lessons: LessonSummary[] };
 type LessonQuestion = {
   id: number;
@@ -12,7 +13,7 @@ type LessonQuestion = {
   explanation: string;
   topicName: string;
 };
-type LessonDetail = { id: number; title: string; content: string; questions: LessonQuestion[] };
+type LessonDetail = { id: number; title: string; description: string; content: string; questions: LessonQuestion[] };
 type CourseDetail = { courseTitle: string; lessons: LessonDetail[] };
 
 export function StudentLessons() {
@@ -128,7 +129,8 @@ export function StudentLessons() {
               <>
                 <p className="text-xs font-bold text-cyan-200">{course?.courseTitle}</p>
                 <h2 className="mt-2 text-2xl font-black text-white">{activeLesson.title}</h2>
-                <article className="mt-5 whitespace-pre-wrap rounded-xl border border-white/8 bg-black/20 p-4 text-sm leading-7 text-slate-300">{activeLesson.content}</article>
+                {activeLesson.description && <p className="mt-2 text-sm text-slate-400">{activeLesson.description}</p>}
+                <article className="mt-5 rounded-xl border border-white/8 bg-black/20 p-4 sm:p-6"><LessonRichTextContent key={activeLesson.id} content={activeLesson.content} /></article>
                 {activeLesson.questions.length > 0 ? (
                   <div className="mt-6">
                     <div className="flex flex-wrap items-center justify-between gap-3">

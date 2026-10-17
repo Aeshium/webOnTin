@@ -2,8 +2,10 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { QuestionBankPicker, type BankQuestion } from "@/components/question-bank-picker";
+import { TeacherLessonEditor, type TeacherLesson } from "@/components/teacher-lesson-editor";
+import { getLessonContentPreview } from "@/lib/lesson-content";
 
-type Lesson = { id: number; title: string; content: string; sortOrder: number; questionIds: number[] };
+type Lesson = TeacherLesson;
 type Assignment = { id: number; title: string; description: string; dueAt: string | null; durationSec: number };
 type CustomQuestionDraft = {
   content: string;
@@ -62,32 +64,28 @@ export function TeacherPortal() {
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
+  const [lessonEditor, setLessonEditor] = useState<{ courseId: number; lesson?: Lesson } | null>(null);
   const [grades, setGrades] = useState<Record<number, { score: string; feedback: string }>>({});
-  const [bankQuestions, setBankQuestions] = useState<BankQuestion[]>([]);
-  const [lessonQuestionIds, setLessonQuestionIds] = useState<Record<number, number[]>>({});
   const [assignmentQuestionIds, setAssignmentQuestionIds] = useState<Record<number, number[]>>({});
+  const [assignmentSelectedQuestions, setAssignmentSelectedQuestions] = useState<Record<number, BankQuestion[]>>({});
   const [assignmentQuestionMode, setAssignmentQuestionMode] = useState<Record<number, "bank" | "custom">>({});
   const [customQuestions, setCustomQuestions] = useState<Record<number, CustomQuestionDraft[]>>({});
 
   async function load() {
     setError("");
     try {
-      const [courseResponse, submissionResponse, questionResponse] = await Promise.all([
+      const [courseResponse, submissionResponse] = await Promise.all([
         fetch("/api/teacher/courses", { cache: "no-store" }),
         fetch("/api/teacher/submissions", { cache: "no-store" }),
-        fetch("/api/teacher/question-bank", { cache: "no-store" }),
       ]);
-      const [courseResult, submissionResult, questionResult] = await Promise.all([
+      const [courseResult, submissionResult] = await Promise.all([
         courseResponse.json(),
         submissionResponse.json(),
-        questionResponse.json(),
       ]);
       if (!courseResponse.ok) throw new Error(courseResult.error ?? "Không tải được khóa học.");
       if (!submissionResponse.ok) throw new Error(submissionResult.error ?? "Không tải được bài nộp.");
-      if (!questionResponse.ok) throw new Error(questionResult.error ?? "Không tải được ngân hàng câu hỏi.");
       setCourses(courseResult);
       setSubmissions(submissionResult);
-      setBankQuestions(questionResult);
       setGrades(Object.fromEntries(submissionResult.map((item: Submission) => [
         item.id,
         { score: item.score === null ? "" : String(item.score), feedback: item.feedback ?? "" },
@@ -104,21 +102,17 @@ export function TeacherPortal() {
     Promise.all([
       fetch("/api/teacher/courses", { cache: "no-store" }),
       fetch("/api/teacher/submissions", { cache: "no-store" }),
-      fetch("/api/teacher/question-bank", { cache: "no-store" }),
     ])
-      .then(async ([courseResponse, submissionResponse, questionResponse]) => {
-        const [courseResult, submissionResult, questionResult] = await Promise.all([
+      .then(async ([courseResponse, submissionResponse]) => {
+        const [courseResult, submissionResult] = await Promise.all([
           courseResponse.json(),
           submissionResponse.json(),
-          questionResponse.json(),
         ]);
         if (!courseResponse.ok) throw new Error(courseResult.error ?? "Không tải được khóa học.");
         if (!submissionResponse.ok) throw new Error(submissionResult.error ?? "Không tải được bài nộp.");
-        if (!questionResponse.ok) throw new Error(questionResult.error ?? "Không tải được ngân hàng câu hỏi.");
         if (!active) return;
         setCourses(courseResult);
         setSubmissions(submissionResult);
-        setBankQuestions(questionResult);
         setGrades(Object.fromEntries(submissionResult.map((item: Submission) => [
           item.id,
           { score: item.score === null ? "" : String(item.score), feedback: item.feedback ?? "" },
@@ -158,36 +152,26 @@ export function TeacherPortal() {
     }
   }
 
-  async function addContent(event: FormEvent<HTMLFormElement>, courseId: number, kind: "lesson" | "assignment") {
+  async function addContent(event: FormEvent<HTMLFormElement>, courseId: number) {
     event.preventDefault();
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form));
-    if (kind === "lesson") {
-      const saved = await sendCourseRequest("/api/teacher/courses", "POST", {
-        ...values,
-        courseId,
-        kind,
-        questionIds: lessonQuestionIds[courseId] ?? [],
-      });
-      if (!saved) return;
-      setLessonQuestionIds((current) => ({ ...current, [courseId]: [] }));
-    } else {
-      const durationMinutes = Number(values.durationMinutes);
-      const dueAt = typeof values.dueAt === "string" ? new Date(values.dueAt).toISOString() : null;
-      const questionMode = assignmentQuestionMode[courseId] ?? "bank";
-      const saved = await sendCourseRequest("/api/teacher/courses", "POST", {
-        ...values,
-        courseId,
-        kind,
-        dueAt,
-        durationSec: durationMinutes * 60,
-        questionIds: questionMode === "bank" ? assignmentQuestionIds[courseId] ?? [] : [],
-        customQuestions: questionMode === "custom" ? customQuestions[courseId] ?? [] : [],
-      });
-      if (!saved) return;
-      setAssignmentQuestionIds((current) => ({ ...current, [courseId]: [] }));
-      setCustomQuestions((current) => ({ ...current, [courseId]: [] }));
-    }
+    const durationMinutes = Number(values.durationMinutes);
+    const dueAt = typeof values.dueAt === "string" ? new Date(values.dueAt).toISOString() : null;
+    const questionMode = assignmentQuestionMode[courseId] ?? "bank";
+    const saved = await sendCourseRequest("/api/teacher/courses", "POST", {
+      ...values,
+      courseId,
+      kind: "assignment",
+      dueAt,
+      durationSec: durationMinutes * 60,
+      questionIds: questionMode === "bank" ? (assignmentSelectedQuestions[courseId] ?? []).map((question) => question.id) : [],
+      customQuestions: questionMode === "custom" ? customQuestions[courseId] ?? [] : [],
+    });
+    if (!saved) return;
+    setAssignmentQuestionIds((current) => ({ ...current, [courseId]: [] }));
+    setAssignmentSelectedQuestions((current) => ({ ...current, [courseId]: [] }));
+    setCustomQuestions((current) => ({ ...current, [courseId]: [] }));
     form.reset();
   }
 
@@ -294,36 +278,16 @@ export function TeacherPortal() {
                   <h3 className="font-bold text-white">Bài học ({course.lessons.length})</h3>
                   <div className="mt-2 space-y-2">
                     {course.lessons.map((lesson) => <article key={lesson.id} className="flex items-center justify-between gap-2 rounded-xl bg-black/20 p-3">
-                      <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-200">{lesson.title}</p><p className="mt-1 line-clamp-2 whitespace-pre-wrap text-xs text-slate-500">{lesson.content}</p></div>
+                      <div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-200">{lesson.title}</p><p className="mt-1 line-clamp-2 text-xs text-slate-500">{lesson.description || getLessonContentPreview(lesson.content) || "Chưa có mô tả"}</p><p className="mt-1 text-[11px] text-slate-600">{lesson.questionIds.length} câu hỏi đính kèm</p></div>
                       <div className="flex shrink-0 gap-2">
-                        <button type="button" onClick={() => {
-                          const title = window.prompt("Tên bài học", lesson.title);
-                          if (title === null) return;
-                          const content = window.prompt("Nội dung bài học", lesson.content);
-                          if (content !== null) {
-                            const ids = window.prompt("ID câu hỏi ngân hàng, phân tách bằng dấu phẩy", lesson.questionIds.join(", "));
-                            if (ids !== null) {
-                              const questionIds = ids.trim() ? ids.split(",").map((value) => Number(value.trim())) : [];
-                              void sendCourseRequest("/api/teacher/courses", "PATCH", { kind: "lesson", id: lesson.id, title, content, questionIds });
-                            }
-                          }
-                        }} className="text-xs text-cyan-200">Sửa</button>
+                        <button type="button" onClick={() => setLessonEditor({ courseId: course.id, lesson })} className="text-xs text-cyan-200">Sửa</button>
                         <button type="button" onClick={() => {
                           if (window.confirm("Xóa bài học này?")) void sendCourseRequest(`/api/teacher/courses?kind=lesson&id=${lesson.id}`, "DELETE");
                         }} className="text-xs text-rose-200">Xóa</button>
                       </div>
                     </article>)}
                   </div>
-                  <form onSubmit={(event) => void addContent(event, course.id, "lesson")} className="mt-3 space-y-2 rounded-xl border border-white/8 p-3">
-                    <input name="title" required minLength={2} maxLength={160} placeholder="Tên bài học mới" className="h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
-                    <textarea name="content" required maxLength={20000} rows={3} placeholder="Nội dung bài học" className="w-full rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-white" />
-                    <QuestionBankPicker
-                      questions={bankQuestions}
-                      selectedIds={lessonQuestionIds[course.id] ?? []}
-                      onChange={(ids) => setLessonQuestionIds((current) => ({ ...current, [course.id]: ids }))}
-                    />
-                    <button disabled={busy} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white">Thêm bài học</button>
-                  </form>
+                  <button type="button" onClick={() => setLessonEditor({ courseId: course.id })} className="mt-3 w-full rounded-xl border border-dashed border-cyan-300/20 px-3 py-3 text-left text-xs font-bold text-cyan-100 transition hover:border-cyan-300/40 hover:bg-cyan-300/5">+ Thêm bài học mới</button>
                 </div>
                 <div>
                   <h3 className="font-bold text-white">Bài tập ({course.assignments.length})</h3>
@@ -343,7 +307,7 @@ export function TeacherPortal() {
                       </div>
                     </article>)}
                   </div>
-                  <form onSubmit={(event) => void addContent(event, course.id, "assignment")} className="mt-3 space-y-2 rounded-xl border border-white/8 p-3">
+                  <form onSubmit={(event) => void addContent(event, course.id)} className="mt-3 space-y-2 rounded-xl border border-white/8 p-3">
                     <input name="title" required minLength={2} maxLength={160} placeholder="Tên bài tập mới" className="h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
                     <textarea name="description" maxLength={5000} rows={2} placeholder="Mô tả yêu cầu" className="w-full rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-white" />
                     <label className="block text-xs font-bold text-slate-300">Hạn nộp
@@ -358,9 +322,12 @@ export function TeacherPortal() {
                     </div>
                     {(assignmentQuestionMode[course.id] ?? "bank") === "bank" ? (
                       <QuestionBankPicker
-                        questions={bankQuestions}
+                        selectedQuestions={assignmentSelectedQuestions[course.id] ?? []}
                         selectedIds={assignmentQuestionIds[course.id] ?? []}
-                        onChange={(ids) => setAssignmentQuestionIds((current) => ({ ...current, [course.id]: ids }))}
+                        onChange={(questions) => {
+                          setAssignmentSelectedQuestions((current) => ({ ...current, [course.id]: questions }));
+                          setAssignmentQuestionIds((current) => ({ ...current, [course.id]: questions.map((question) => question.id) }));
+                        }}
                       />
                     ) : <div className="space-y-3 rounded-xl border border-white/8 p-3">
                       <div className="flex items-center justify-between gap-2">
@@ -481,6 +448,16 @@ export function TeacherPortal() {
           {!loading && submissions.length === 0 && <p className="rounded-2xl border border-dashed border-white/15 p-8 text-center text-sm text-slate-500">Chưa có bài nộp nào.</p>}
         </div>
       </section>
+      {lessonEditor && <TeacherLessonEditor
+        key={`${lessonEditor.courseId}-${lessonEditor.lesson?.id ?? "new"}`}
+        courseId={lessonEditor.courseId}
+        lesson={lessonEditor.lesson}
+        onClose={() => setLessonEditor(null)}
+        onSaved={async () => {
+          await load();
+          setNotice(lessonEditor.lesson ? "Đã cập nhật bài học." : "Đã tạo bài học.");
+        }}
+      />}
     </div>
   );
 }
