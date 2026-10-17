@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
   try {
     const [user] = await db
       .insert(users)
-      .values({ name, email, passwordHash: await hashPassword(password) })
+      .values({ name, email, passwordHash: await hashPassword(password), loginCount: 1 })
       .returning({ id: users.id, name: users.name, email: users.email, role: users.role });
     const token = await createSession(user.id);
     const response = NextResponse.json({

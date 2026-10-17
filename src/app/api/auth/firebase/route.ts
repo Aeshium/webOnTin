@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
           passwordHash: await hashPassword(randomBytes(48).toString("base64url")),
           avatarUrl: identity.photoUrl ?? null,
           loginStreak: 1,
+          loginCount: 1,
           lastLoginAt: now,
         })
         .returning();
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
           .set({
             lastLoginAt: now,
             loginStreak,
+            loginCount: user.loginCount + 1,
             ...(!user.avatarUrl && identity.photoUrl ? { avatarUrl: identity.photoUrl } : {}),
           })
           .where(eq(users.id, user.id));

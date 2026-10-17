@@ -1,7 +1,7 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, isNotNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { assignmentSubmissions, assignments, courses, users } from "@/db/schema";
+import { assignmentQuestions, assignmentSubmissions, assignments, courses, users } from "@/db/schema";
 import { getCurrentUser } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
@@ -24,18 +24,51 @@ export async function GET() {
       studentName: users.name,
       studentEmail: users.email,
       content: assignmentSubmissions.content,
+      selectedAnswers: assignmentSubmissions.selectedAnswers,
       score: assignmentSubmissions.score,
       feedback: assignmentSubmissions.feedback,
       submittedAt: assignmentSubmissions.submittedAt,
+      startedAt: assignmentSubmissions.startedAt,
       gradedAt: assignmentSubmissions.gradedAt,
     })
     .from(assignmentSubmissions)
     .innerJoin(assignments, eq(assignmentSubmissions.assignmentId, assignments.id))
     .innerJoin(courses, eq(assignments.courseId, courses.id))
     .innerJoin(users, eq(assignmentSubmissions.userId, users.id))
-    .where(teacher.role === "admin" ? undefined : eq(courses.teacherId, teacher.id))
+    .where(and(
+      isNotNull(assignmentSubmissions.submittedAt),
+      ...(teacher.role === "admin" ? [] : [eq(courses.teacherId, teacher.id)])
+    ))
     .orderBy(desc(assignmentSubmissions.submittedAt));
-  return NextResponse.json(rows);
+  const assignmentIds = [...new Set(rows.map((row) => row.assignmentId))];
+  const questions = assignmentIds.length
+    ? await db.select({
+        assignmentId: assignmentQuestions.assignmentId,
+        id: assignmentQuestions.id,
+        content: assignmentQuestions.content,
+        options: assignmentQuestions.options,
+        correctIndex: assignmentQuestions.correctIndex,
+        explanation: assignmentQuestions.explanation,
+        sortOrder: assignmentQuestions.sortOrder,
+      })
+      .from(assignmentQuestions)
+      .where(inArray(assignmentQuestions.assignmentId, assignmentIds))
+      .orderBy(assignmentQuestions.sortOrder)
+    : [];
+  const questionsByAssignment = new Map<number, typeof questions>();
+  for (const question of questions) {
+    const list = questionsByAssignment.get(question.assignmentId) ?? [];
+    list.push(question);
+    questionsByAssignment.set(question.assignmentId, list);
+  }
+  return NextResponse.json(rows.map((row) => ({
+    ...row,
+    reviewQuestions: (questionsByAssignment.get(row.assignmentId) ?? []).map((question, index) => ({
+      ...question,
+      selectedAnswer: row.selectedAnswers?.[index] ?? null,
+      isCorrect: row.selectedAnswers?.[index] === question.correctIndex,
+    })),
+  })));
 }
 
 export async function PATCH(request: NextRequest) {
@@ -65,6 +98,7 @@ export async function PATCH(request: NextRequest) {
     .innerJoin(courses, eq(assignments.courseId, courses.id))
     .where(and(
       eq(assignmentSubmissions.id, body.id as number),
+      isNotNull(assignmentSubmissions.submittedAt),
       ...(teacher.role === "admin" ? [] : [eq(courses.teacherId, teacher.id)])
     ))
     .limit(1);

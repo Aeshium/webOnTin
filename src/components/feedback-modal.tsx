@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { MessageSquarePlus, X } from "lucide-react";
+import { ImagePlus, MessageSquarePlus, X } from "lucide-react";
 
 export function FeedbackModal() {
   const [open, setOpen] = useState(false);
@@ -19,11 +19,7 @@ export function FeedbackModal() {
     try {
       const response = await fetch("/api/feedback", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: values.get("type"),
-          content: values.get("content"),
-        }),
+        body: values,
       });
       const result: { error?: string; warning?: string } = await response.json();
       if (!response.ok) {
@@ -88,6 +84,11 @@ export function FeedbackModal() {
               <label className="block space-y-2 text-sm font-semibold text-slate-200">
                 <span>Nội dung</span>
                 <textarea name="content" required minLength={5} maxLength={4000} rows={6} className="w-full resize-y rounded-xl border border-white/10 bg-ink-950 p-3 text-white outline-none focus:border-cyan-300/50" placeholder="Mô tả chi tiết phản hồi..." />
+              </label>
+              <label className="flex cursor-pointer items-center gap-2 text-sm font-semibold text-slate-300">
+                <ImagePlus className="h-4 w-4 text-cyan-300" />
+                Đính kèm ảnh (PNG, JPEG, WebP · tối đa 3 MB)
+                <input name="image" type="file" accept="image/png,image/jpeg,image/webp" className="sr-only" />
               </label>
               {error && <p role="alert" className="text-sm text-rose-300">{error}</p>}
               <button disabled={busy} className="w-full rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 font-bold text-ink-950 disabled:opacity-60">

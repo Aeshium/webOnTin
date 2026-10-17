@@ -1,10 +1,28 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import { QuestionBankPicker, type BankQuestion } from "@/components/question-bank-picker";
 
-type Lesson = { id: number; title: string; content: string; sortOrder: number };
-type Assignment = { id: number; title: string; description: string; dueAt: string | null };
-type EnrolledStudent = { id: number; name: string; email: string };
+type Lesson = { id: number; title: string; content: string; sortOrder: number; questionIds: number[] };
+type Assignment = { id: number; title: string; description: string; dueAt: string | null; durationSec: number };
+type CustomQuestionDraft = {
+  content: string;
+  options: [string, string, string, string];
+  correctIndex: number;
+  explanation: string;
+};
+type EnrolledStudent = {
+  id: number;
+  userId: number;
+  name: string;
+  email: string;
+  schoolName: string | null;
+  className: string | null;
+  lastLoginAt: string;
+  loginCount: number;
+  isActive: boolean;
+  createdAt: string;
+};
 type Course = {
   id: number;
   title: string;
@@ -17,6 +35,7 @@ type Course = {
 };
 type Submission = {
   id: number;
+  assignmentId: number;
   assignmentTitle: string;
   courseTitle: string;
   studentName: string;
@@ -24,6 +43,16 @@ type Submission = {
   content: string;
   score: number | null;
   feedback: string | null;
+  submittedAt: string | null;
+  reviewQuestions: {
+    id: number;
+    content: string;
+    options: string[];
+    correctIndex: number;
+    explanation: string;
+    selectedAnswer: number | null;
+    isCorrect: boolean;
+  }[];
 };
 
 export function TeacherPortal() {
@@ -34,19 +63,31 @@ export function TeacherPortal() {
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
   const [grades, setGrades] = useState<Record<number, { score: string; feedback: string }>>({});
+  const [bankQuestions, setBankQuestions] = useState<BankQuestion[]>([]);
+  const [lessonQuestionIds, setLessonQuestionIds] = useState<Record<number, number[]>>({});
+  const [assignmentQuestionIds, setAssignmentQuestionIds] = useState<Record<number, number[]>>({});
+  const [assignmentQuestionMode, setAssignmentQuestionMode] = useState<Record<number, "bank" | "custom">>({});
+  const [customQuestions, setCustomQuestions] = useState<Record<number, CustomQuestionDraft[]>>({});
 
   async function load() {
     setError("");
     try {
-      const [courseResponse, submissionResponse] = await Promise.all([
+      const [courseResponse, submissionResponse, questionResponse] = await Promise.all([
         fetch("/api/teacher/courses", { cache: "no-store" }),
         fetch("/api/teacher/submissions", { cache: "no-store" }),
+        fetch("/api/teacher/question-bank", { cache: "no-store" }),
       ]);
-      const [courseResult, submissionResult] = await Promise.all([courseResponse.json(), submissionResponse.json()]);
+      const [courseResult, submissionResult, questionResult] = await Promise.all([
+        courseResponse.json(),
+        submissionResponse.json(),
+        questionResponse.json(),
+      ]);
       if (!courseResponse.ok) throw new Error(courseResult.error ?? "Không tải được khóa học.");
       if (!submissionResponse.ok) throw new Error(submissionResult.error ?? "Không tải được bài nộp.");
+      if (!questionResponse.ok) throw new Error(questionResult.error ?? "Không tải được ngân hàng câu hỏi.");
       setCourses(courseResult);
       setSubmissions(submissionResult);
+      setBankQuestions(questionResult);
       setGrades(Object.fromEntries(submissionResult.map((item: Submission) => [
         item.id,
         { score: item.score === null ? "" : String(item.score), feedback: item.feedback ?? "" },
@@ -63,14 +104,21 @@ export function TeacherPortal() {
     Promise.all([
       fetch("/api/teacher/courses", { cache: "no-store" }),
       fetch("/api/teacher/submissions", { cache: "no-store" }),
+      fetch("/api/teacher/question-bank", { cache: "no-store" }),
     ])
-      .then(async ([courseResponse, submissionResponse]) => {
-        const [courseResult, submissionResult] = await Promise.all([courseResponse.json(), submissionResponse.json()]);
+      .then(async ([courseResponse, submissionResponse, questionResponse]) => {
+        const [courseResult, submissionResult, questionResult] = await Promise.all([
+          courseResponse.json(),
+          submissionResponse.json(),
+          questionResponse.json(),
+        ]);
         if (!courseResponse.ok) throw new Error(courseResult.error ?? "Không tải được khóa học.");
         if (!submissionResponse.ok) throw new Error(submissionResult.error ?? "Không tải được bài nộp.");
+        if (!questionResponse.ok) throw new Error(questionResult.error ?? "Không tải được ngân hàng câu hỏi.");
         if (!active) return;
         setCourses(courseResult);
         setSubmissions(submissionResult);
+        setBankQuestions(questionResult);
         setGrades(Object.fromEntries(submissionResult.map((item: Submission) => [
           item.id,
           { score: item.score === null ? "" : String(item.score), feedback: item.feedback ?? "" },
@@ -87,7 +135,7 @@ export function TeacherPortal() {
     };
   }, []);
 
-  async function sendCourseRequest(url: string, method: "POST" | "PATCH" | "DELETE", body?: object) {
+  async function sendCourseRequest(url: string, method: "POST" | "PATCH" | "DELETE", body?: object): Promise<boolean> {
     setBusy(true);
     setError("");
     setNotice("");
@@ -101,8 +149,10 @@ export function TeacherPortal() {
       if (!response.ok) throw new Error(result.error ?? "Không cập nhật được nội dung.");
       setNotice("Đã lưu thay đổi.");
       await load();
+      return true;
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Không cập nhật được nội dung.");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -112,8 +162,59 @@ export function TeacherPortal() {
     event.preventDefault();
     const form = event.currentTarget;
     const values = Object.fromEntries(new FormData(form));
-    await sendCourseRequest("/api/teacher/courses", "POST", { ...values, courseId, kind });
+    if (kind === "lesson") {
+      const saved = await sendCourseRequest("/api/teacher/courses", "POST", {
+        ...values,
+        courseId,
+        kind,
+        questionIds: lessonQuestionIds[courseId] ?? [],
+      });
+      if (!saved) return;
+      setLessonQuestionIds((current) => ({ ...current, [courseId]: [] }));
+    } else {
+      const durationMinutes = Number(values.durationMinutes);
+      const dueAt = typeof values.dueAt === "string" ? new Date(values.dueAt).toISOString() : null;
+      const questionMode = assignmentQuestionMode[courseId] ?? "bank";
+      const saved = await sendCourseRequest("/api/teacher/courses", "POST", {
+        ...values,
+        courseId,
+        kind,
+        dueAt,
+        durationSec: durationMinutes * 60,
+        questionIds: questionMode === "bank" ? assignmentQuestionIds[courseId] ?? [] : [],
+        customQuestions: questionMode === "custom" ? customQuestions[courseId] ?? [] : [],
+      });
+      if (!saved) return;
+      setAssignmentQuestionIds((current) => ({ ...current, [courseId]: [] }));
+      setCustomQuestions((current) => ({ ...current, [courseId]: [] }));
+    }
     form.reset();
+  }
+
+  function addCustomQuestion(courseId: number) {
+    const blank: CustomQuestionDraft = {
+      content: "",
+      options: ["", "", "", ""],
+      correctIndex: 0,
+      explanation: "",
+    };
+    setCustomQuestions((current) => ({
+      ...current,
+      [courseId]: [...(current[courseId] ?? []), blank],
+    }));
+  }
+
+  function updateCustomQuestion(
+    courseId: number,
+    index: number,
+    update: Partial<CustomQuestionDraft>
+  ) {
+    setCustomQuestions((current) => ({
+      ...current,
+      [courseId]: (current[courseId] ?? []).map((question, itemIndex) =>
+        itemIndex === index ? { ...question, ...update } : question
+      ),
+    }));
   }
 
   async function gradeSubmission(event: FormEvent<HTMLFormElement>, submissionId: number) {
@@ -151,7 +252,9 @@ export function TeacherPortal() {
         event.preventDefault();
         const form = event.currentTarget;
         const values = Object.fromEntries(new FormData(form));
-        void sendCourseRequest("/api/teacher/courses", "POST", { ...values, kind: "course" }).then(() => form.reset());
+        void sendCourseRequest("/api/teacher/courses", "POST", { ...values, kind: "course" }).then((saved) => {
+          if (saved) form.reset();
+        });
       }} className="mt-6 grid gap-3 rounded-2xl border border-white/10 bg-white/[0.035] p-5 md:grid-cols-[1fr_2fr_auto]">
         <input name="title" required minLength={2} maxLength={160} placeholder="Tên khóa học" className="h-11 rounded-xl border border-white/10 bg-ink-950 px-3 text-sm text-white" />
         <input name="description" maxLength={5000} placeholder="Mô tả khóa học" className="h-11 rounded-xl border border-white/10 bg-ink-950 px-3 text-sm text-white" />
@@ -197,7 +300,13 @@ export function TeacherPortal() {
                           const title = window.prompt("Tên bài học", lesson.title);
                           if (title === null) return;
                           const content = window.prompt("Nội dung bài học", lesson.content);
-                          if (content !== null) void sendCourseRequest("/api/teacher/courses", "PATCH", { kind: "lesson", id: lesson.id, title, content });
+                          if (content !== null) {
+                            const ids = window.prompt("ID câu hỏi ngân hàng, phân tách bằng dấu phẩy", lesson.questionIds.join(", "));
+                            if (ids !== null) {
+                              const questionIds = ids.trim() ? ids.split(",").map((value) => Number(value.trim())) : [];
+                              void sendCourseRequest("/api/teacher/courses", "PATCH", { kind: "lesson", id: lesson.id, title, content, questionIds });
+                            }
+                          }
                         }} className="text-xs text-cyan-200">Sửa</button>
                         <button type="button" onClick={() => {
                           if (window.confirm("Xóa bài học này?")) void sendCourseRequest(`/api/teacher/courses?kind=lesson&id=${lesson.id}`, "DELETE");
@@ -208,6 +317,11 @@ export function TeacherPortal() {
                   <form onSubmit={(event) => void addContent(event, course.id, "lesson")} className="mt-3 space-y-2 rounded-xl border border-white/8 p-3">
                     <input name="title" required minLength={2} maxLength={160} placeholder="Tên bài học mới" className="h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
                     <textarea name="content" required maxLength={20000} rows={3} placeholder="Nội dung bài học" className="w-full rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-white" />
+                    <QuestionBankPicker
+                      questions={bankQuestions}
+                      selectedIds={lessonQuestionIds[course.id] ?? []}
+                      onChange={(ids) => setLessonQuestionIds((current) => ({ ...current, [course.id]: ids }))}
+                    />
                     <button disabled={busy} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white">Thêm bài học</button>
                   </form>
                 </div>
@@ -232,30 +346,100 @@ export function TeacherPortal() {
                   <form onSubmit={(event) => void addContent(event, course.id, "assignment")} className="mt-3 space-y-2 rounded-xl border border-white/8 p-3">
                     <input name="title" required minLength={2} maxLength={160} placeholder="Tên bài tập mới" className="h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
                     <textarea name="description" maxLength={5000} rows={2} placeholder="Mô tả yêu cầu" className="w-full rounded-lg border border-white/10 bg-ink-950 p-3 text-sm text-white" />
-                    <input name="dueAt" type="datetime-local" className="h-10 rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
+                    <label className="block text-xs font-bold text-slate-300">Hạn nộp
+                      <input name="dueAt" required type="datetime-local" className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
+                    </label>
+                    <label className="block text-xs font-bold text-slate-300">Thời gian làm bài (phút)
+                      <input name="durationMinutes" required type="number" min={1} max={120} defaultValue={30} className="mt-1 h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
+                    </label>
+                    <div role="tablist" aria-label="Phương thức chọn câu hỏi" className="grid grid-cols-2 gap-2">
+                      <button type="button" role="tab" aria-selected={(assignmentQuestionMode[course.id] ?? "bank") === "bank"} onClick={() => setAssignmentQuestionMode((current) => ({ ...current, [course.id]: "bank" }))} className={`rounded-lg px-3 py-2 text-xs font-bold ${(assignmentQuestionMode[course.id] ?? "bank") === "bank" ? "bg-cyan-300 text-ink-950" : "border border-white/10 text-slate-300"}`}>Tab 1 · Chọn từ kho</button>
+                      <button type="button" role="tab" aria-selected={assignmentQuestionMode[course.id] === "custom"} onClick={() => setAssignmentQuestionMode((current) => ({ ...current, [course.id]: "custom" }))} className={`rounded-lg px-3 py-2 text-xs font-bold ${assignmentQuestionMode[course.id] === "custom" ? "bg-violet-300 text-ink-950" : "border border-white/10 text-slate-300"}`}>Tab 2 · Tự soạn</button>
+                    </div>
+                    {(assignmentQuestionMode[course.id] ?? "bank") === "bank" ? (
+                      <QuestionBankPicker
+                        questions={bankQuestions}
+                        selectedIds={assignmentQuestionIds[course.id] ?? []}
+                        onChange={(ids) => setAssignmentQuestionIds((current) => ({ ...current, [course.id]: ids }))}
+                      />
+                    ) : <div className="space-y-3 rounded-xl border border-white/8 p-3">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs font-black text-violet-200">Tự soạn câu hỏi</p>
+                        <button type="button" onClick={() => addCustomQuestion(course.id)} className="rounded-lg border border-violet-300/20 px-3 py-1.5 text-xs font-bold text-violet-200">Thêm câu hỏi mới</button>
+                      </div>
+                      {(customQuestions[course.id] ?? []).map((question, index) => (
+                        <fieldset key={index} className="space-y-2 rounded-xl bg-black/20 p-3">
+                          <legend className="px-1 text-xs font-bold text-slate-300">Câu tự soạn {index + 1}</legend>
+                          <textarea required minLength={3} maxLength={2000} value={question.content} onChange={(event) => updateCustomQuestion(course.id, index, { content: event.target.value })} rows={2} placeholder="Nội dung câu hỏi" className="w-full rounded-lg border border-white/10 bg-ink-950 p-2.5 text-sm text-white" />
+                          {question.options.map((option, optionIndex) => (
+                            <div key={optionIndex} className="flex items-center gap-2">
+                              <input type="radio" name={`correct-${course.id}-${index}`} checked={question.correctIndex === optionIndex} onChange={() => updateCustomQuestion(course.id, index, { correctIndex: optionIndex })} aria-label={`Đặt phương án ${String.fromCharCode(65 + optionIndex)} làm đáp án đúng`} className="accent-cyan-300" />
+                              <input required maxLength={500} value={option} onChange={(event) => {
+                                const options = [...question.options] as CustomQuestionDraft["options"];
+                                options[optionIndex] = event.target.value;
+                                updateCustomQuestion(course.id, index, { options });
+                              }} placeholder={`Đáp án ${String.fromCharCode(65 + optionIndex)}`} className="h-9 min-w-0 flex-1 rounded-lg border border-white/10 bg-ink-950 px-2.5 text-xs text-white" />
+                            </div>
+                          ))}
+                          <textarea maxLength={2000} value={question.explanation} onChange={(event) => updateCustomQuestion(course.id, index, { explanation: event.target.value })} rows={2} placeholder="Giải thích đáp án" className="w-full rounded-lg border border-white/10 bg-ink-950 p-2.5 text-xs text-white" />
+                          <button type="button" onClick={() => setCustomQuestions((current) => ({ ...current, [course.id]: (current[course.id] ?? []).filter((_, itemIndex) => itemIndex !== index) }))} className="text-xs font-bold text-rose-200">Xóa câu này</button>
+                        </fieldset>
+                      ))}
+                    </div>}
                     <button disabled={busy} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white">Thêm bài tập</button>
                   </form>
                 </div>
               </div>
               <div className="mt-5 border-t border-white/8 pt-4">
                 <h3 className="font-bold text-white">Danh sách học sinh</h3>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {course.enrolledStudents.map((student) => <span key={student.id} className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-xs text-slate-300">
-                    {student.name} · {student.email}
-                    <button type="button" aria-label={`Xóa ${student.email} khỏi khóa học`} onClick={() => {
-                      const enrollment = course.enrolledStudents.find((item) => item.id === student.id);
-                      if (enrollment && window.confirm(`Xóa ${student.name} khỏi khóa học?`)) {
-                        void sendCourseRequest(`/api/teacher/courses?kind=enrollment&id=${student.id}`, "DELETE");
-                      }
-                    }} className="font-black text-rose-300">×</button>
-                  </span>)}
-                  {course.enrolledStudents.length === 0 && <p className="text-xs text-slate-500">Chưa có học sinh tham gia.</p>}
+                <div className="mt-3 overflow-x-auto rounded-xl border border-white/10">
+                  <table className="w-full min-w-[900px] text-left text-xs">
+                    <thead className="bg-white/5 text-[10px] uppercase tracking-wide text-slate-400">
+                      <tr>
+                        <th className="p-3">Tên hiển thị / Email</th>
+                        <th className="p-3">Trường</th>
+                        <th className="p-3">Lớp</th>
+                        <th className="p-3">Lần đăng nhập gần nhất</th>
+                        <th className="p-3">Số lần đăng nhập</th>
+                        <th className="p-3">Ngày tạo tài khoản</th>
+                        <th className="p-3">Trạng thái</th>
+                        <th className="p-3">Quản lý</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/8">
+                      {course.enrolledStudents.map((student) => {
+                        const lastSeen = new Date(student.lastLoginAt);
+                        const online = Date.now() - lastSeen.getTime() < 15 * 60 * 1000;
+                        return (
+                          <tr key={student.id} className="text-slate-300">
+                            <td className="p-3"><p className="font-bold text-white">{student.name}</p><p className="mt-1 text-slate-500">{student.email}</p></td>
+                            <td className="p-3">{student.schoolName || "—"}</td>
+                            <td className="p-3">{student.className || "—"}</td>
+                            <td className="whitespace-nowrap p-3">{lastSeen.toLocaleString("vi-VN")}</td>
+                            <td className="p-3">{student.loginCount} lần</td>
+                            <td className="whitespace-nowrap p-3">{new Date(student.createdAt).toLocaleDateString("vi-VN")}</td>
+                            <td className={`p-3 font-bold ${!student.isActive ? "text-rose-300" : online ? "text-emerald-300" : "text-slate-500"}`}>{!student.isActive ? "Đã khóa" : online ? "Đang hoạt động" : "Offline"}</td>
+                            <td className="p-3">
+                              <button type="button" aria-label={`Xóa ${student.email} khỏi khóa học`} onClick={() => {
+                                if (window.confirm(`Xóa ${student.name} khỏi khóa học?`)) {
+                                  void sendCourseRequest(`/api/teacher/courses?kind=enrollment&id=${student.id}`, "DELETE");
+                                }
+                              }} className="rounded-lg border border-rose-400/20 px-2.5 py-1.5 font-bold text-rose-200">Bỏ khỏi lớp</button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {course.enrolledStudents.length === 0 && <tr><td colSpan={8} className="p-5 text-center text-slate-500">Chưa có học sinh tham gia.</td></tr>}
+                    </tbody>
+                  </table>
                 </div>
                 <form onSubmit={(event) => {
                   event.preventDefault();
                   const form = event.currentTarget;
                   const data = Object.fromEntries(new FormData(form));
-                  void sendCourseRequest("/api/teacher/courses", "POST", { ...data, courseId: course.id, kind: "enrollment" }).then(() => form.reset());
+                  void sendCourseRequest("/api/teacher/courses", "POST", { ...data, courseId: course.id, kind: "enrollment" }).then((saved) => {
+                    if (saved) form.reset();
+                  });
                 }} className="mt-3 flex max-w-lg gap-2">
                   <input name="email" required type="email" placeholder="Email tài khoản học sinh" className="h-10 min-w-0 flex-1 rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />
                   <button disabled={busy} className="rounded-lg bg-white/10 px-3 py-2 text-xs font-bold text-white">Thêm học sinh</button>
@@ -275,7 +459,18 @@ export function TeacherPortal() {
             return <article key={submission.id} className="rounded-2xl border border-white/10 bg-white/[0.035] p-5">
               <p className="text-xs font-bold text-cyan-200">{submission.courseTitle} · {submission.assignmentTitle}</p>
               <p className="mt-2 font-bold text-white">{submission.studentName} <span className="font-normal text-slate-500">· {submission.studentEmail}</span></p>
-              <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-black/20 p-4 text-sm text-slate-300">{submission.content}</p>
+              {submission.submittedAt && <p className="mt-1 text-xs text-slate-500">Nộp lúc {new Date(submission.submittedAt).toLocaleString("vi-VN")}</p>}
+              {submission.reviewQuestions.length > 0 ? <details className="mt-3 rounded-xl bg-black/20 p-4">
+                <summary className="cursor-pointer text-sm font-bold text-cyan-100">Xem đáp án từng câu ({submission.reviewQuestions.filter((question) => question.isCorrect).length}/{submission.reviewQuestions.length} đúng)</summary>
+                <div className="mt-4 space-y-4">
+                  {submission.reviewQuestions.map((question, index) => <div key={question.id} className="border-t border-white/8 pt-3">
+                    <p className="text-sm font-bold text-white">Câu {index + 1}. {question.content}</p>
+                    <p className={`mt-2 text-xs ${question.isCorrect ? "text-emerald-200" : "text-rose-200"}`}>Học sinh chọn: {question.selectedAnswer === null ? "Bỏ trống" : `${String.fromCharCode(65 + question.selectedAnswer)}. ${question.options[question.selectedAnswer]}`} {question.isCorrect ? "✓" : ""}</p>
+                    {!question.isCorrect && <p className="mt-1 text-xs text-cyan-100">Đáp án đúng: {String.fromCharCode(65 + question.correctIndex)}. {question.options[question.correctIndex]}</p>}
+                    {question.explanation && <p className="mt-1 whitespace-pre-wrap text-xs leading-relaxed text-slate-400">{question.explanation}</p>}
+                  </div>)}
+                </div>
+              </details> : <p className="mt-3 whitespace-pre-wrap break-words rounded-xl bg-black/20 p-4 text-sm text-slate-300">{submission.content}</p>}
               <form onSubmit={(event) => void gradeSubmission(event, submission.id)} className="mt-3 flex flex-col gap-3 sm:flex-row">
                 <input required type="number" min={0} max={100} value={grade.score} onChange={(event) => setGrades((current) => ({ ...current, [submission.id]: { ...grade, score: event.target.value } }))} placeholder="Điểm 0–100" className="h-10 w-full rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white sm:w-32" />
                 <input maxLength={2000} value={grade.feedback} onChange={(event) => setGrades((current) => ({ ...current, [submission.id]: { ...grade, feedback: event.target.value } }))} placeholder="Nhận xét" className="h-10 flex-1 rounded-lg border border-white/10 bg-ink-950 px-3 text-sm text-white" />

@@ -21,31 +21,50 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Vui lòng đăng nhập để gửi phản hồi." }, { status: 401 });
   }
 
-  let body: { type?: unknown; content?: unknown };
+  let type: unknown;
+  let rawContent: unknown;
+  let image: File | null = null;
   try {
-    body = await request.json();
+    const form = await request.formData();
+    type = form.get("type");
+    rawContent = form.get("content");
+    const upload = form.get("image");
+    image = upload instanceof File && upload.size > 0 ? upload : null;
   } catch {
     return NextResponse.json({ error: "Dữ liệu phản hồi không hợp lệ." }, { status: 400 });
   }
 
-  const type = body?.type;
-  const content = typeof body?.content === "string" ? body.content.trim() : "";
+  const content = typeof rawContent === "string" ? rawContent.trim() : "";
   if (
     !isFeedbackType(type) ||
     content.length < 5 ||
-    content.length > 4000
+    content.length > 4000 ||
+    (image !== null && image.size > 3 * 1024 * 1024)
   ) {
     return NextResponse.json(
-      { error: "Hãy chọn loại phản hồi và nhập nội dung từ 5 đến 4.000 ký tự." },
+      { error: "Hãy chọn loại phản hồi, nhập nội dung từ 5–4.000 ký tự; ảnh tối đa 3 MB." },
       { status: 400 }
     );
+  }
+
+  let imageDataUrl: string | null = null;
+  if (image) {
+    const bytes = Buffer.from(await image.arrayBuffer());
+    const validImage =
+      image.type === "image/png" && bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])) ||
+      image.type === "image/jpeg" && bytes[0] === 0xff && bytes[1] === 0xd8 && bytes.at(-2) === 0xff && bytes.at(-1) === 0xd9 ||
+      image.type === "image/webp" && bytes.toString("ascii", 0, 4) === "RIFF" && bytes.toString("ascii", 8, 12) === "WEBP";
+    if (!validImage) {
+      return NextResponse.json({ error: "Chỉ hỗ trợ ảnh PNG, JPEG hoặc WebP hợp lệ." }, { status: 400 });
+    }
+    imageDataUrl = `data:${image.type};base64,${bytes.toString("base64")}`;
   }
 
   let feedback: { id: string; createdAt: Date };
   try {
     const [created] = await db
       .insert(feedbacks)
-      .values({ userId: user.id, type, content })
+      .values({ userId: user.id, type, content, imageDataUrl })
       .returning({ id: feedbacks.id, createdAt: feedbacks.createdAt });
     if (!created) throw new Error("Database did not return the created feedback.");
     feedback = created;
@@ -65,10 +84,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const discordResponse = await fetch(webhookUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+    const payload = {
         username: "ÔnTin · Phản hồi",
         allowed_mentions: { parse: [] },
         embeds: [{
@@ -79,9 +95,23 @@ export async function POST(request: NextRequest) {
             { name: "Người gửi", value: `${user.name}\n${user.email}`.slice(0, 1024), inline: true },
             { name: "ID phản hồi", value: feedback.id, inline: true },
           ],
+          ...(image ? { image: { url: `attachment://${image.name}` } } : {}),
           timestamp: feedback.createdAt.toISOString(),
         }],
-      }),
+      };
+    let requestBody: BodyInit;
+    if (image) {
+      const discordForm = new FormData();
+      discordForm.set("payload_json", JSON.stringify(payload));
+      discordForm.set("files[0]", new Blob([await image.arrayBuffer()], { type: image.type }), image.name);
+      requestBody = discordForm;
+    } else {
+      requestBody = JSON.stringify(payload);
+    }
+    const discordResponse = await fetch(webhookUrl, {
+      method: "POST",
+      ...(image ? {} : { headers: { "Content-Type": "application/json" } }),
+      body: requestBody,
       signal: AbortSignal.timeout(7000),
       cache: "no-store",
     });

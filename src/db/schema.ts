@@ -49,6 +49,7 @@ export const users = pgTable("users", {
   examDate: timestamp("exam_date", { withTimezone: true }),
   loginStreak: integer("login_streak").notNull().default(0),
   correctAnswerStreak: integer("correct_answer_streak").notNull().default(0),
+  loginCount: integer("login_count").notNull().default(0),
   equippedAchievementKey: text("equipped_achievement_key"),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true })
     .notNull()
@@ -69,6 +70,7 @@ export const feedbacks = pgTable(
     }),
     type: text("type").$type<FeedbackType>().notNull(),
     content: text("content").notNull(),
+    imageDataUrl: text("image_data_url"),
     status: text("status").$type<FeedbackStatus>().notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
@@ -130,6 +132,24 @@ export const lessons = pgTable(
   (table) => [index("lessons_course_order_idx").on(table.courseId, table.sortOrder)]
 );
 
+export const lessonQuestions = pgTable(
+  "lesson_questions",
+  {
+    id: serial("id").primaryKey(),
+    lessonId: integer("lesson_id")
+      .notNull()
+      .references(() => lessons.id, { onDelete: "cascade" }),
+    questionId: integer("question_id")
+      .notNull()
+      .references(() => questions.id, { onDelete: "cascade" }),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    uniqueIndex("lesson_questions_lesson_question_idx").on(table.lessonId, table.questionId),
+    index("lesson_questions_lesson_order_idx").on(table.lessonId, table.sortOrder),
+  ]
+);
+
 export const assignments = pgTable("assignments", {
   id: serial("id").primaryKey(),
   courseId: integer("course_id")
@@ -138,10 +158,32 @@ export const assignments = pgTable("assignments", {
   title: text("title").notNull(),
   description: text("description").notNull().default(""),
   dueAt: timestamp("due_at", { withTimezone: true }),
+  durationSec: integer("duration_sec").notNull().default(1800),
   createdAt: timestamp("created_at", { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
+
+export const assignmentQuestions = pgTable(
+  "assignment_questions",
+  {
+    id: serial("id").primaryKey(),
+    assignmentId: integer("assignment_id")
+      .notNull()
+      .references(() => assignments.id, { onDelete: "cascade" }),
+    sourceQuestionId: integer("source_question_id").references(() => questions.id, {
+      onDelete: "set null",
+    }),
+    content: text("content").notNull(),
+    options: jsonb("options").$type<string[]>().notNull(),
+    correctIndex: integer("correct_index").notNull(),
+    explanation: text("explanation").notNull(),
+    sortOrder: integer("sort_order").notNull().default(0),
+  },
+  (table) => [
+    index("assignment_questions_assignment_order_idx").on(table.assignmentId, table.sortOrder),
+  ]
+);
 
 export const assignmentSubmissions = pgTable(
   "assignment_submissions",
@@ -153,18 +195,19 @@ export const assignmentSubmissions = pgTable(
     userId: integer("user_id")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    content: text("content").notNull(),
+    content: text("content").notNull().default(""),
+    selectedAnswers: jsonb("selected_answers").$type<(number | null)[]>(),
+    currentIndex: integer("current_index").notNull().default(0),
+    startedAt: timestamp("started_at", { withTimezone: true }),
     score: integer("score"),
     feedback: text("feedback"),
-    submittedAt: timestamp("submitted_at", { withTimezone: true })
-      .notNull()
-      .defaultNow(),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
     gradedAt: timestamp("graded_at", { withTimezone: true }),
   },
   (table) => [
     index("assignment_submissions_assignment_idx").on(table.assignmentId),
     index("assignment_submissions_user_idx").on(table.userId),
-    uniqueIndex("assignment_submissions_assignment_user_idx").on(table.assignmentId, table.userId),
+    index("assignment_submissions_assignment_user_idx").on(table.assignmentId, table.userId),
   ]
 );
 

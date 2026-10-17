@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     await db.transaction(async (tx) => {
       await tx
         .update(users)
-        .set({ lastLoginAt: now, loginStreak })
+        .set({ lastLoginAt: now, loginStreak, loginCount: user.loginCount + 1 })
         .where(eq(users.id, user.id));
 
       const earnedKeys = [];

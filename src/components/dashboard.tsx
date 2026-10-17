@@ -15,7 +15,6 @@ import type {
   TopicPerformance,
 } from "@/lib/queries";
 import { TopicCard } from "@/components/topic-card";
-import { ScrollToTopicsButton } from "@/components/scroll-to-topics-button";
 import { TopicsLink } from "@/components/topics-link";
 import { DashboardRecentAttempts } from "@/components/dashboard-recent-attempts";
 
@@ -112,7 +111,6 @@ export function Dashboard({
               theo để củng cố kiến thức Tin học.
             </p>
             <div className="mt-5 flex flex-wrap gap-3">
-              <ScrollToTopicsButton />
               <Link
                 href="/on-luyen"
                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-violet-300/25 bg-violet-300/10 px-5 py-3 text-sm font-bold text-violet-100 transition-colors hover:bg-violet-300/20"
@@ -121,17 +119,11 @@ export function Dashboard({
                 Ôn Luyện
               </Link>
               <Link
-                href="/thi-thu"
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-cyan-400 to-violet-500 px-5 py-3 text-sm font-black text-ink-950 shadow-lg shadow-violet-500/20 transition hover:brightness-110"
+                href="/#chuyen-de"
+                className="inline-flex items-center justify-center gap-2 rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-5 py-3 text-sm font-bold text-cyan-100 transition hover:bg-cyan-300/20"
               >
-                <Play className="h-4 w-4" fill="currentColor" />
-                Làm đề thi thử
-              </Link>
-              <Link
-                href="/bai-tap"
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-5 py-3 text-sm font-bold text-white transition hover:bg-white/10"
-              >
-                Bài tập
+                <BookOpen className="h-4 w-4" />
+                Chọn chuyên đề
               </Link>
             </div>
           </div>
